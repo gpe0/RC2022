@@ -10,70 +10,76 @@
 #include <unistd.h>
 #include <signal.h>
 #include "api.h"
+
 #define BUF_SIZE 256
 
 volatile int STOP = FALSE;
+
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
-// Alarm function handler
 void timout(int signal)
 {
     alarmEnabled = FALSE;
     alarmCount++;
+
     printf("Alarm #%d\n", alarmCount);
 }
-
 int sendSetMessage(int serial)
 {
     unsigned char buf[BUF_SIZE] = {FLAG, A2, SET, A2 ^ SET + '0', FLAG, '\0'};
     write(serial, buf, BUF_SIZE);
+    sleep(1);
 }
 
 int sendUaMessage(int serial)
 {
     unsigned char buf[BUF_SIZE] = {FLAG, A2, UA, A2 ^ UA + '0', FLAG, '\0'};
     write(serial, buf, BUF_SIZE);
+    sleep(1);
 }
 
 int llopen(int serial, unsigned char flag)
 {
-    STOP = FALSE;
+
+
     (void)signal(SIGALRM, timout);
+
     unsigned char buf[BUF_SIZE] = {0};
-    unsigned char temp_buf[BUF_SIZE] = {0};
+
     if (flag == TRANSMITTER)
     {
-        sendSetMessage(serial);
-        while (STOP == FALSE)
+        while (alarmCount < 4)
         {
-            read(serial, temp_buf, BUF_SIZE);
-            strcat(buf, temp_buf);
-            if (strlen(temp_buf) == 0)
-                STOP = TRUE;
+            if (alarmEnabled == FALSE)
+            {
+                sendSetMessage(serial);
+                alarm(3);
+                alarmEnabled = TRUE;
+                memset(buf, 0, BUF_SIZE);
+                read(serial, buf, BUF_SIZE);   
+                alarm(0); // disable the alarm
+
+                if (buf[0] != FLAG ||
+                    buf[1] != A2 ||
+                    buf[2] != UA ||
+                    buf[3] != (buf[1] ^ buf[2] + '0') ||
+                    buf[4] != FLAG)
+                {
+
+                    return -1;
+                }
+                return 0;
+            }
         }
 
-        if (buf[0] != FLAG ||
-            buf[1] != A2 ||
-            buf[2] != UA ||
-            buf[3] != (buf[1] ^ buf[2] + '0') ||
-            buf[4] != FLAG)
-        {
-            return -1;
-        }
+        if (alarmCount == 4)
+            return -1; // error
     }
-
     else if (flag == RECEIVER)
     {
-        while (STOP == FALSE)
-        {
-            read(serial, temp_buf, BUF_SIZE);
-            strcat(buf, temp_buf);
-            if (strlen(temp_buf) == 0)
-                STOP = TRUE;
-            if (alarmCount > 0)
-                return -1;
-        }
+        read(serial, buf, BUF_SIZE);
+
 
         if (buf[0] != FLAG ||
             buf[1] != A2 ||
@@ -81,6 +87,7 @@ int llopen(int serial, unsigned char flag)
             buf[3] != (buf[1] ^ buf[2] + '0') ||
             buf[4] != FLAG)
         {
+
             return -1;
         }
 
