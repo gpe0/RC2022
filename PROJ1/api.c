@@ -18,6 +18,7 @@ volatile int STOP = FALSE;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
+
 struct termios oldtio;
 struct termios newtio;
 
@@ -25,20 +26,19 @@ void timout(int signal)
 {
     alarmEnabled = FALSE;
     alarmCount++;
-
     printf("Alarm #%d\n", alarmCount);
 }
-int sendSetMessage(int serial)
+int sendSetMessage(int fd)
 {
     unsigned char buf[BUF_SIZE] = {FLAG, A2, SET, A2 ^ SET + '0', FLAG, '\0'};
-    write(serial, buf, BUF_SIZE);
+    write(fd, buf, BUF_SIZE);
     sleep(1);
 }
 
-int sendUaMessage(int serial)
+int sendUaMessage(int fd)
 {
     unsigned char buf[BUF_SIZE] = {FLAG, A2, UA, A2 ^ UA + '0', FLAG, '\0'};
-    write(serial, buf, BUF_SIZE);
+    write(fd, buf, BUF_SIZE);
     sleep(1);
 }
 
@@ -71,8 +71,8 @@ int llopen(const char * serial, unsigned char flag)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 0; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 1;  // Blocking read until 5 chars received (now is 1)
+    newtio.c_cc[VTIME] = 20; // Inter-character timer unused
+    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received (now is 0)
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -88,7 +88,7 @@ int llopen(const char * serial, unsigned char flag)
     if (tcsetattr(fd, TCSANOW, &newtio) == -1)
     {
         perror("tcsetattr");
-        exit(-1);
+        return -1;
     }
 
     printf("New termios structure set\n");
@@ -102,13 +102,16 @@ int llopen(const char * serial, unsigned char flag)
     {
         while (alarmCount < 4)
         {
+            tcflush(fd, TCIOFLUSH);
             if (alarmEnabled == FALSE)
             {
-                sendSetMessage(fd);
                 alarm(3);
+                sendSetMessage(fd);
                 alarmEnabled = TRUE;
                 memset(buf, 0, BUF_SIZE);
-                read(fd, buf, BUF_SIZE);   
+                read(fd, buf, BUF_SIZE);
+
+                if (alarmEnabled == FALSE) continue;
                 alarm(0); // disable the alarm
 
                 if (buf[0] != FLAG ||
@@ -117,15 +120,14 @@ int llopen(const char * serial, unsigned char flag)
                     buf[3] != (buf[1] ^ buf[2] + '0') ||
                     buf[4] != FLAG)
                 {
-
                     return -1;
                 }
-                return 0;
+                return fd;
             }
         }
-
-        if (alarmCount == 4)
-            return -1; // error
+        
+        llclose(fd);
+        return -1;
     }
     else if (flag == RECEIVER)
     {
@@ -145,7 +147,7 @@ int llopen(const char * serial, unsigned char flag)
         sendUaMessage(fd);
     }
 
-    return 0;
+    return fd;
 }
 
 int llclose(int fd) {
@@ -153,7 +155,7 @@ int llclose(int fd) {
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
     {
         perror("tcsetattr");
-        exit(-1);
+        return -1;
     }
 
     close(fd);

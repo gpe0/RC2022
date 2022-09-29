@@ -25,6 +25,6 @@ int llopen(const char * serial, unsigned char flag);
 
 int llclose(int fd);
 
-int sendSetMessage(int serial);
+int sendSetMessage(int fd);
 
-int sendUaMessage(int serial);
+int sendUaMessage(int fd);

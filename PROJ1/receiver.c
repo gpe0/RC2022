@@ -31,8 +31,11 @@ int main(int argc, char *argv[])
     }
 
     int fd = llopen(serialPortName, RECEIVER);
-    printf("%d\n", fd);
 
+    if (fd < 0) {
+        printf("Error!\n");
+        return -1;
+    }
 
     llclose(fd);
 
