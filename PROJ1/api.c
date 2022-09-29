@@ -100,7 +100,7 @@ int llopen(const char * serial, unsigned char flag)
 
     if (flag == TRANSMITTER)
     {
-        while (alarmCount < 4)
+        while (TRUE)
         {
             tcflush(fd, TCIOFLUSH);
             if (alarmEnabled == FALSE)
@@ -110,8 +110,7 @@ int llopen(const char * serial, unsigned char flag)
                 alarmEnabled = TRUE;
                 memset(buf, 0, BUF_SIZE);
                 read(fd, buf, BUF_SIZE);
-
-                if (alarmEnabled == FALSE) continue;
+                if (alarmEnabled == FALSE && alarmCount < 3) continue;
                 alarm(0); // disable the alarm
 
                 if (buf[0] != FLAG ||
