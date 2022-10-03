@@ -18,7 +18,6 @@ volatile int STOP = FALSE;
 int alarmEnabled = FALSE;
 int alarmCount = 0;
 
-
 struct termios oldtio;
 struct termios newtio;
 
@@ -42,10 +41,74 @@ int sendUaMessage(int fd)
     sleep(1);
 }
 
-int llopen(const char * serial, unsigned char flag)
+int stateMachine(unsigned char byte, int cState, unsigned char C)
+{
+    switch (cState)
+    {
+    case START_ST:
+        if (byte == FLAG)
+        {
+            return FLAG_RCV;
+        }
+        else
+        {
+            return START_ST;
+        }
+    case FLAG_RCV:
+        if (byte == FLAG)
+        {
+            return FLAG_RCV;
+        }
+        if (byte == A2)
+        {
+            return A_RCV;
+        }
+        else
+        {
+            return START_ST;
+        }
+    case A_RCV:
+        if (byte == FLAG)
+        {
+            return FLAG_RCV;
+        }
+        if (byte == C)
+        {
+            return C_RCV;
+        }
+        else
+        {
+            return START_ST;
+        }
+    case C_RCV:
+        if (byte == FLAG)
+        {
+            return FLAG_RCV;
+        }
+        if (byte == (C ^ A2 + '0'))
+        {
+            return BCC_OK;
+        }
+        else
+        {
+            return START_ST;
+        }
+    case BCC_OK:
+        if (byte == FLAG)
+        {
+            return STOP_ST;
+        }
+        else
+        {
+            return START_ST;
+        }
+    }
+}
+
+int llopen(const char *serial, unsigned char flag)
 {
 
-     // Open serial port device for reading and writing, and not as controlling tty
+    // Open serial port device for reading and writing, and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
     int fd = open(serial, O_RDWR | O_NOCTTY);
 
@@ -72,7 +135,7 @@ int llopen(const char * serial, unsigned char flag)
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
     newtio.c_cc[VTIME] = 20; // Inter-character timer unused
-    newtio.c_cc[VMIN] = 0;  // Blocking read until 5 chars received (now is 0)
+    newtio.c_cc[VMIN] = 0;   // Blocking read until 5 chars received (now is 0)
 
     // VTIME e VMIN should be changed in order to protect with a
     // timeout the reception of the following character(s)
@@ -93,7 +156,6 @@ int llopen(const char * serial, unsigned char flag)
 
     printf("New termios structure set\n");
 
-
     (void)signal(SIGALRM, timout);
 
     unsigned char buf[BUF_SIZE] = {0};
@@ -109,38 +171,38 @@ int llopen(const char * serial, unsigned char flag)
                 sendSetMessage(fd);
                 alarmEnabled = TRUE;
                 memset(buf, 0, BUF_SIZE);
-                read(fd, buf, BUF_SIZE);
-                if (alarmEnabled == FALSE) continue;
-                alarm(0); // disable the alarm
+                if (alarmEnabled == FALSE)
+                    continue;
 
-                if (buf[0] != FLAG ||
-                    buf[1] != A2 ||
-                    buf[2] != UA ||
-                    buf[3] != (buf[1] ^ buf[2] + '0') ||
-                    buf[4] != FLAG)
+                int state = START_ST;
+                while (read(fd, buf, 1) != 0 && state != STOP_ST)
                 {
-                    return -1;
+                    state = stateMachine(buf[0], state, UA);
+                    if (alarmEnabled == FALSE)
+                        break;
                 }
+                if (alarmEnabled == FALSE)
+                    continue;
+
+                alarm(0); // disable the alarm
                 return fd;
             }
         }
-        
-        //llclose(fd);
+
+        llclose(fd);
         return -1;
     }
     else if (flag == RECEIVER)
     {
-        read(fd, buf, BUF_SIZE);
-
-
-        if (buf[0] != FLAG ||
-            buf[1] != A2 ||
-            buf[2] != SET ||
-            buf[3] != (buf[1] ^ buf[2] + '0') ||
-            buf[4] != FLAG)
+        int received = FALSE;
+        while (received == FALSE)
         {
-
-            return -1;
+            int state = START_ST;
+            while (read(fd, buf, 1) != 0 && state != STOP_ST)
+            {
+                state = stateMachine(buf[0], state, SET);
+            }
+            if (state == STOP_ST) received = TRUE;
         }
 
         sendUaMessage(fd);
@@ -149,7 +211,8 @@ int llopen(const char * serial, unsigned char flag)
     return fd;
 }
 
-int llclose(int fd) {
+int llclose(int fd)
+{
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
     {

@@ -19,6 +19,15 @@
 #define UA 0x01
 #define DISC 0x0B
 
+#define ESC 0x7D //FLAG -> ESC 0x5E
+                 //ESC -> ESC 0x5D
+#define START_ST 0
+#define FLAG_RCV 1
+#define A_RCV 2
+#define C_RCV 3
+#define BCC_OK 4
+#define STOP_ST 5
+
 void timout(int signal);
 
 int llopen(const char * serial, unsigned char flag);
@@ -28,3 +37,5 @@ int llclose(int fd);
 int sendSetMessage(int fd);
 
 int sendUaMessage(int fd);
+
+int stateMachine(unsigned char byte, int cState, unsigned char C);
