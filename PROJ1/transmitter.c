@@ -33,6 +33,10 @@ int main(int argc, char *argv[])
         printf("Error!\n");
         return -1;
     }
+
+    unsigned char buf[BUF_SIZE] = "boas";
+
+    printf("%d\n", llwrite(fd, buf, strlen(buf)));
     
     llclose(fd);
 

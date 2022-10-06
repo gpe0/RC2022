@@ -202,7 +202,8 @@ int llopen(const char *serial, unsigned char flag)
             {
                 state = stateMachine(buf[0], state, SET);
             }
-            if (state == STOP_ST) received = TRUE;
+            if (state == STOP_ST)
+                received = TRUE;
         }
 
         sendUaMessage(fd);
@@ -222,4 +223,107 @@ int llclose(int fd)
 
     close(fd);
     return 0;
+}
+
+int llwrite(int fd, unsigned char *buffer, int length)
+{
+    unsigned char frame[BUF_SIZE] = {FLAG, A2, I_0, A2 ^ I_0};
+    unsigned char bcc2;
+
+    unsigned int nextByte = 4;
+
+    for (unsigned int i = 0; i < length; i++)
+    {
+        if (buffer[i] == FLAG)
+        {
+            frame[nextByte++] = ESC;
+            if (i == 0)
+                bcc2 = ESC;
+            else
+                bcc2 = bcc2 ^ ESC;
+
+            frame[nextByte++] = 0x5E;
+
+            bcc2 = bcc2 ^ 0x5E;
+        }
+        else if (buffer[i] == ESC)
+        {
+            frame[nextByte++] = ESC;
+            if (i == 0)
+                bcc2 = ESC;
+            else
+                bcc2 = bcc2 ^ ESC;
+                
+            frame[nextByte++] = 0x5D;
+
+            bcc2 = bcc2 ^ 0x5D;
+        }
+        else
+        {
+            frame[nextByte++] = buffer[i];
+
+            if (i == 0)
+                bcc2 = buffer[i];
+            else
+                bcc2 = bcc2 ^ buffer[i];
+        }
+    }
+    frame[nextByte++] = bcc2;
+    frame[nextByte++] = FLAG;
+
+    write(fd, frame, BUF_SIZE);
+    return nextByte - 6;
+}
+
+int llread(int fd, unsigned char *buffer)
+{
+    unsigned char temp_buf[BUF_SIZE] = {0};
+    unsigned char buf[BUF_SIZE] = {0};
+    unsigned int nextByte = 0;
+    memset(buffer, 0, BUF_SIZE);
+    int startedReading = FALSE;
+    while (read(fd, temp_buf, 1) != 0)
+    {
+        //printf("%x\n", temp_buf[0]); to test
+        //buf[nextByte++] = temp_buf[0]; in feup
+
+        if (startedReading == FALSE) {
+            if (temp_buf[0] == FLAG) {
+                buf[nextByte++] = temp_buf[0];
+                startedReading = TRUE;
+            }
+        } else {
+            buf[nextByte++] = temp_buf[0];
+        }
+
+
+    }
+    buf[nextByte++] = '\0';
+    if (buf[0] != FLAG || buf[1] != A2 || buf[2] != I_0 || buf[3] != A2 ^ I_0 ) return -1;
+    int hadESC = FALSE;
+    unsigned char bcc2;
+    int length = 0;
+    int i = 4;
+    nextByte = 0;
+    while (1) {
+        if (i == 4) bcc2 = buf[i];
+        else bcc2 = bcc2 ^ buf[i];
+        length++;
+        if (hadESC == TRUE) {
+            if (buf[i] == 0x5E) temp_buf[nextByte++] = FLAG;
+            else if (buf[i] == 0x5D) temp_buf[nextByte++] = ESC;
+            else return -1;
+        }
+        if (buf[i] == ESC) hadESC = TRUE;
+        else {
+            temp_buf[nextByte++] = buf[i];
+            hadESC = FALSE;
+        }
+        i++;
+        if (bcc2 == buf[i]) break;
+    }
+    temp_buf[nextByte++] = '\0';
+    strcpy(buffer, temp_buf);
+    if (buf[++i] != FLAG) return -1;
+    return length;
 }

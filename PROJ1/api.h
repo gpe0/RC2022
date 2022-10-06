@@ -28,11 +28,22 @@
 #define BCC_OK 4
 #define STOP_ST 5
 
+#define I_0 0x00
+#define I_1 0xB0
+#define RR_0 0x05
+#define RR_1 0xB5
+#define REJ_0 0x01
+#define REJ_1 0x81
+
 void timout(int signal);
 
 int llopen(const char * serial, unsigned char flag);
 
 int llclose(int fd);
+
+int llwrite(int fd, unsigned char * buffer, int length);
+
+int llread(int fd, unsigned char * buffer);
 
 int sendSetMessage(int fd);
 

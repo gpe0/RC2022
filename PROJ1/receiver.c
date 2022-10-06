@@ -37,6 +37,12 @@ int main(int argc, char *argv[])
         return -1;
     }
 
+    unsigned char buf[BUF_SIZE] = {0};
+
+    printf("%d\n", llread(fd, buf));
+
+    printf("%s\n", buf);
+
     llclose(fd);
 
     return 0;
