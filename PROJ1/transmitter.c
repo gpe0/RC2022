@@ -34,9 +34,9 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    unsigned char buf[BUF_SIZE] = "boas";
+    unsigned char buf[BUF_SIZE] = "uma frase maior";
 
-    printf("%d\n", llwrite(fd, buf, strlen(buf)));
+    llwrite(fd, buf, strlen(buf));
     
     llclose(fd);
 

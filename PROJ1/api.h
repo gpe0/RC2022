@@ -19,8 +19,13 @@
 #define UA 0x01
 #define DISC 0x0B
 
+#define CONTROL_FRAME_SIZE 5
+
 #define ESC 0x7D //FLAG -> ESC 0x5E
                  //ESC -> ESC 0x5D
+
+
+#define RESEND -1
 #define START_ST 0
 #define FLAG_RCV 1
 #define A_RCV 2
@@ -49,4 +54,14 @@ int sendSetMessage(int fd);
 
 int sendUaMessage(int fd);
 
+int sendIMessage(int fd, unsigned char * buffer, int length);
+
+int sendRRMessage(int fd);
+
+int sendREJMessage(int fd);
+
+int receiveMessage(int fd, unsigned char * buffer);
+
 int stateMachine(unsigned char byte, int cState, unsigned char C);
+
+int copyArray(unsigned char * source, unsigned char * dest, unsigned int length);

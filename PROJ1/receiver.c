@@ -1,7 +1,3 @@
-// Read from serial port in non-canonical mode
-//
-// Modified by: Eduardo Nuno Almeida [enalmeida@fe.up.pt]
-
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,12 +32,11 @@ int main(int argc, char *argv[])
         printf("Error!\n");
         return -1;
     }
-
     unsigned char buf[BUF_SIZE] = {0};
 
-    printf("%d\n", llread(fd, buf));
+    llread(fd, buf);
 
-    printf("%s\n", buf);
+    printf("String read: %s\n", buf);
 
     llclose(fd);
 
