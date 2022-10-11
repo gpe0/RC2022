@@ -7,7 +7,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include "api.h"
-
+#include "application_layer.h"
 
 int main(int argc, char *argv[])
 {
@@ -40,5 +40,9 @@ int main(int argc, char *argv[])
 
     llclose(fd);
 
+    // testing application layer
+    printf("Testing application layer...\n");
+    
+    applicationLayer(serialPortName, "rx", 0,0,0, "penguin.gif");
     return 0;
 }
