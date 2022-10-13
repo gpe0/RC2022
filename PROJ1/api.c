@@ -458,7 +458,7 @@ int llread(int fd, unsigned char *buffer)
 
         nextByte = 0;
         memset(buf, 0, BUF_SIZE);
-
+        printf("stuck in the receiveMessage cycle\n");
         while (read(fd, temp_buf, 1) != 0)
         {
             buf[nextByte++] = temp_buf[0];

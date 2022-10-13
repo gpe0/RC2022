@@ -41,7 +41,6 @@ int main(int argc, char *argv[])
     
     llclose(fd);
 
-
     // testing application layer
     printf("Testing application layer...\n");
     

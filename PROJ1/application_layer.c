@@ -6,11 +6,11 @@
 
 #include "application_layer.h"
 
-int build_control_packet(const char *filename, unsigned char* start_packet, int flag){
+unsigned char* build_control_packet(const char *filename, int flag){
     FILE* fp = fopen(filename, "r");
     if (fp == NULL) {
         printf("File Not Found!\n");
-        return -1;
+        return NULL;
     }
     // Get the file size
     fseek(fp, 0L, SEEK_END);
@@ -18,7 +18,7 @@ int build_control_packet(const char *filename, unsigned char* start_packet, int 
     rewind(fp);
 
     int CONTROL_PACKET_SIZE = 3 + sizeof(file_size) + 2 + strlen(filename);
-    unsigned char * control_packet = (unsigned char *) malloc((CONTROL_PACKET_SIZE*sizeof(char)));
+    unsigned char* control_packet = (unsigned char *) malloc((CONTROL_PACKET_SIZE*sizeof(char)));
     
     int index = 0;
     control_packet[index++] = flag;
@@ -51,9 +51,9 @@ int build_control_packet(const char *filename, unsigned char* start_packet, int 
     printf("\n");
     */
 
-    start_packet = control_packet;
     //free(control_packet);
-    return 0;
+    printf("Control packet build!\n");
+    return control_packet;
 }
 
 int build_data_packet(const char *filename, unsigned char* packet){
@@ -87,35 +87,44 @@ int build_data_packet(const char *filename, unsigned char* packet){
 
 void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename)
 {
-    if (role == "tx"){
+    printf("role is %s\n", role);
+    if (!strcmp(role, "tx")){
+        printf("in transmitter\n");
         int fd = llopen(serialPort, TRANSMITTER);
         
         if (fd < 0) {
             printf("Error!\n");
             exit(-1);
         }
-        printf("Connection established!\n");
 
-        unsigned char* start_packet;
-        build_control_packet(filename, start_packet, START_PACKET);
+        unsigned char* start_packet = build_control_packet(filename, START_PACKET);
+
+        printf("Control packet:\n");
+        for (int i=0; i < 20; i++){
+                printf("%x ", start_packet[i]);
+        }
+        printf("\n");
 
         llwrite(fd, start_packet, sizeof(start_packet));
         printf("Start control packet sent!\n");
+        
         free(start_packet);
+        llclose(fd);
     }
-    else if(role == "rx"){
+    if(!strcmp(role, "rx")){
+        printf("in receiver\n");
         int fd = llopen(serialPort, RECEIVER);
 
         if (fd < 0) {
             printf("Error!\n");
             exit(-1);
         }
-        printf("Connection established!\n");
-
 
         unsigned char buf[BUF_SIZE] = {0};
+        
         llread(fd, buf);
-
         printf("Start packet read: %s\n", buf);
+
+        llclose(fd);
     }
 }

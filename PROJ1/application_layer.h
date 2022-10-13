@@ -24,8 +24,8 @@
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-int build_control_packet(const char *filename, unsigned char* packet, int flag);
+unsigned char* build_control_packet(const char *filename, int flag);
 
-int builf_data_packet(const char *filename, unsigned char* packet);
+int build_data_packet(const char *filename, unsigned char* packet);
 
 #endif // _APPLICATION_LAYER_H_
