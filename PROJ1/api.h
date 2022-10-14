@@ -25,13 +25,13 @@
                  //ESC -> ESC 0x5D
 
 
-#define RESEND -1
 #define START_ST 0
 #define FLAG_RCV 1
 #define A_RCV 2
 #define C_RCV 3
 #define BCC_OK 4
 #define STOP_ST 5
+#define RESEND 6
 
 #define I_0 0x00
 #define I_1 0xB0
@@ -54,6 +54,8 @@ int sendSetMessage(int fd);
 
 int sendUaMessage(int fd);
 
+int sendDiscMessage(int fd);
+
 int sendIMessage(int fd, unsigned char * buffer, int length);
 
 int sendRRMessage(int fd);
@@ -65,3 +67,5 @@ int receiveMessage(int fd, unsigned char * buffer);
 int stateMachine(unsigned char byte, int cState, unsigned char C);
 
 int copyArray(unsigned char * source, unsigned char * dest, unsigned int length);
+
+void clearBuffer(int fd);

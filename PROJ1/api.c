@@ -15,6 +15,7 @@ int alarmEnabled = FALSE;
 int alarmCount = 0;
 
 int signalMessage = 0;
+unsigned char role;
 
 struct termios oldtio;
 struct termios newtio;
@@ -27,17 +28,21 @@ void timout(int signal)
 }
 int sendSetMessage(int fd)
 {
-    unsigned char buf[BUF_SIZE] = {FLAG, A2, SET, A2 ^ SET, FLAG};
+    unsigned char buf[BUF_SIZE] = {FLAG, A2, SET, (A2 ^ SET), FLAG};
     write(fd, buf, CONTROL_FRAME_SIZE);
-    sleep(1);
     return 0;
 }
 
 int sendUaMessage(int fd)
 {
-    unsigned char buf[BUF_SIZE] = {FLAG, A2, UA, A2 ^ UA, FLAG};
+    unsigned char buf[BUF_SIZE] = {FLAG, A2, UA, (A2 ^ UA), FLAG};
     write(fd, buf, CONTROL_FRAME_SIZE);
-    sleep(1);
+    return 0;
+}
+
+int sendDiscMessage(int fd) {
+    unsigned char buf[BUF_SIZE] = {FLAG, A2, DISC, (A2 ^ DISC), FLAG};
+    write(fd, buf, CONTROL_FRAME_SIZE);
     return 0;
 }
 
@@ -47,10 +52,9 @@ int sendRRMessage(int fd)
     if (signalMessage == 0)
         RRField = RR_1;
     else
-        RRField == RR_0;
-    unsigned char buf[BUF_SIZE] = {FLAG, A2, RRField, A2 ^ RRField, FLAG};
+        RRField = RR_0;
+    unsigned char buf[BUF_SIZE] = {FLAG, A2, RRField, (A2 ^ RRField), FLAG};
     write(fd, buf, CONTROL_FRAME_SIZE);
-    sleep(1);
     return 0;
 }
 
@@ -60,8 +64,8 @@ int sendREJMessage(int fd)
     if (signalMessage == 0)
         REJField = REJ_0;
     else
-        REJField == REJ_1;
-    unsigned char buf[BUF_SIZE] = {FLAG, A2, REJField, A2 ^ REJField, FLAG};
+        REJField = REJ_1;
+    unsigned char buf[BUF_SIZE] = {FLAG, A2, REJField, (A2 ^ REJField), FLAG};
     write(fd, buf, CONTROL_FRAME_SIZE);
     return 0;
 }
@@ -73,7 +77,7 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
         IField = I_0;
     else
         IField = I_1;
-    unsigned char frame[BUF_SIZE] = {FLAG, A2, IField, A2 ^ IField};
+    unsigned char frame[BUF_SIZE] = {FLAG, A2, IField, (A2 ^ IField)};
     unsigned char bcc2;
 
     unsigned int nextByte = 4; // next byte in the frame
@@ -86,11 +90,11 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
             if (i == 0)
                 bcc2 = ESC;
             else
-                bcc2 = bcc2 ^ ESC;
+                bcc2 ^= ESC;
 
             frame[nextByte++] = 0x5E;
 
-            bcc2 = bcc2 ^ 0x5E;
+            bcc2 ^= 0x5E;
         }
         else if (buffer[i] == ESC) // Byte stuffing
         {
@@ -98,11 +102,11 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
             if (i == 0)
                 bcc2 = ESC;
             else
-                bcc2 = bcc2 ^ ESC;
+                bcc2 ^= ESC;
 
             frame[nextByte++] = 0x5D;
 
-            bcc2 = bcc2 ^ 0x5D;
+            bcc2 ^= 0x5D;
         }
         else
         {
@@ -111,16 +115,13 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
             if (i == 0)
                 bcc2 = buffer[i];
             else
-                bcc2 = bcc2 ^ buffer[i];
+                bcc2 ^= buffer[i];
         }
     }
     frame[nextByte++] = bcc2;
     frame[nextByte++] = FLAG;
 
     write(fd, frame, nextByte);
-
-    sleep(1);
-
     return 0;
 }
 
@@ -133,9 +134,12 @@ int receiveMessage(int fd, unsigned char *buffer)
         IField = I_0;
     else
         IField = I_1;
-
-    if (buffer[0] != FLAG || buffer[1] != A2 || buffer[2] != IField || buffer[3] != A2 ^ IField)
+    if (buffer[0] != FLAG || buffer[1] != A2 || buffer[2] != IField || buffer[3] != (A2 ^ IField)) {
+        if (buffer[2] == DISC) return -2;
         return -1;
+    }
+        
+
     int hadESC = FALSE;
     unsigned char bcc2;
     int length = 0;
@@ -143,11 +147,16 @@ int receiveMessage(int fd, unsigned char *buffer)
     int nextByte = 0;
     while (1)
     {
-        if (i == 4)
+        
+        if (buffer[i + 1] == FLAG && buffer[i + 2] == '\0') {
+            if (buffer[i] != bcc2) return -1;
+            break;
+        }
+        else if (i == 4)
             bcc2 = buffer[i];
         else
-            bcc2 = bcc2 ^ buffer[i];
-        length++;
+            bcc2 ^= buffer[i];
+
         if (hadESC == TRUE)
         {
             if (buffer[i] == 0x5E)
@@ -156,21 +165,23 @@ int receiveMessage(int fd, unsigned char *buffer)
                 temp_buf[nextByte++] = ESC;
             else
                 return -1;
+            hadESC = FALSE;
+            length++;
         }
-        if (buffer[i] == ESC)
+        else if (buffer[i] == ESC)
             hadESC = TRUE;
         else
         {
+            length++;
             temp_buf[nextByte++] = buffer[i];
             hadESC = FALSE;
         }
         i++;
-        if (bcc2 == buffer[i])
-            break;
     }
     copyArray(temp_buf, buffer, nextByte);
-    if (buffer[++i] != FLAG)
+    if (buffer[++i] != FLAG) {
         return -1;
+    }
     return length;
 }
 
@@ -190,13 +201,13 @@ int stateMachine(unsigned char byte, int cState, unsigned char C)
     if (signalMessage == 0)
         REJField = REJ_0;
     else
-        REJField == REJ_1;
+        REJField = REJ_1;
 
     unsigned char RRField;
     if (signalMessage == 0)
         RRField = RR_1;
     else
-        RRField == RR_0;
+        RRField = RR_0;
 
     switch (cState)
     {
@@ -244,7 +255,7 @@ int stateMachine(unsigned char byte, int cState, unsigned char C)
         {
             return FLAG_RCV;
         }
-        if (byte == C ^ A2)
+        if (byte == (C ^ A2))
         {
             return BCC_OK;
         }
@@ -261,6 +272,8 @@ int stateMachine(unsigned char byte, int cState, unsigned char C)
         {
             return START_ST;
         }
+    case RESEND:
+        return RESEND;
     }
 }
 
@@ -272,6 +285,7 @@ int llopen(const char *serial, unsigned char flag)
 
     alarmCount = 0;
     alarmEnabled = FALSE;
+    role = flag;
 
     if (fd < 0)
     {
@@ -295,7 +309,7 @@ int llopen(const char *serial, unsigned char flag)
 
     // Set input mode (non-canonical, no echo,...)
     newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 10; // Inter-character timer unused
+    newtio.c_cc[VTIME] = 1; // Inter-character timer unused
     newtio.c_cc[VMIN] = 0;   // Blocking read until 5 chars received (now is 0)
 
     // VTIME e VMIN should be changed in order to protect with a
@@ -336,8 +350,10 @@ int llopen(const char *serial, unsigned char flag)
                     continue;
 
                 int state = START_ST;
-                while (read(fd, buf, 1) == 0)
-                    ;
+                while (read(fd, buf, 1) == 0) {
+                    if (alarmEnabled == FALSE)
+                        break;
+                }
                 while (state != STOP_ST)
                 {
                     state = stateMachine(buf[0], state, UA);
@@ -379,6 +395,51 @@ int llopen(const char *serial, unsigned char flag)
 
 int llclose(int fd)
 {
+    (void)signal(SIGALRM, timout);
+    alarmCount = 0;
+    alarmEnabled = FALSE;
+    unsigned char buf[BUF_SIZE] = {0};
+
+    if (role == TRANSMITTER) {
+        while (alarmCount < 4)
+        {
+            tcflush(fd, TCIOFLUSH);
+            if (alarmEnabled == FALSE)
+            {
+                sendDiscMessage(fd);
+                alarm(3);
+                int state = START_ST;
+                while (read(fd, buf, 1) != 0 && state != STOP_ST)
+                {
+                    state = stateMachine(buf[0], state, DISC);
+                    if (alarmEnabled == FALSE)
+                        break;
+                }
+                alarm(0);
+                sendUaMessage(fd);
+                break;
+            }
+        }
+    }
+    else {
+        int state = START_ST;
+        while (read(fd, buf, 1) != 0 && state != STOP_ST)
+        {
+            state = stateMachine(buf[0], state, DISC);
+            if (alarmEnabled == FALSE)
+                break;
+        }
+        state = START_ST;
+        sendDiscMessage(fd);
+        while (read(fd, buf, 1) != 0 && state != STOP_ST)
+        {
+            state = stateMachine(buf[0], state, UA);
+            if (alarmEnabled == FALSE)
+                break;
+        }
+    }
+
+
     // Restore the old port settings
     if (tcsetattr(fd, TCSANOW, &oldtio) == -1)
     {
@@ -414,16 +475,23 @@ int llwrite(int fd, unsigned char *buffer, int length)
             if (signalMessage == 0)
                 RRField = RR_1;
             else
-                RRField == RR_0;
-            while (read(fd, buf, 1) != 0 && state != STOP_ST)
+                RRField = RR_0;
+            while (read(fd, buf, 1) == 0) {
+                if (alarmEnabled == FALSE)
+                    break;
+            }
+            do
             {
                 state = stateMachine(buf[0], state, RRField);
                 if (alarmEnabled == FALSE || state == RESEND)
                     break;
-            }
+                read(fd, buf, 1);
+            } while (state != STOP_ST);
+
             alarm(0); // disable the alarm
             if (alarmEnabled == FALSE || state == RESEND)
             {
+                //clearBuffer(fd);
                 alarmEnabled = FALSE;
                 continue;
             }
@@ -446,27 +514,41 @@ int llread(int fd, unsigned char *buffer)
     int bytes = 0;
     int nextByte = 0;
 
-    while (read(fd, temp_buf, 1) != 0)
+    while (read(fd, temp_buf, 1) == 0);
+
+    do
     {
         buf[nextByte++] = temp_buf[0];
-    }
+    } while (read(fd, temp_buf, 1) != 0);
+    
     bytes = receiveMessage(fd, buf);
 
     while (bytes == -1)
     {
+        printf("sending rej\n");
         sendREJMessage(fd);
-
         nextByte = 0;
         memset(buf, 0, BUF_SIZE);
-        printf("stuck in the receiveMessage cycle\n");
         while (read(fd, temp_buf, 1) != 0)
         {
             buf[nextByte++] = temp_buf[0];
         }
         bytes = receiveMessage(fd, buf);
     }
+    if (bytes == -2) return 0;
+
     memset(buffer, 0, BUF_SIZE);
     copyArray(buf, buffer, bytes);
     sendRRMessage(fd);
+    if (signalMessage == 0)
+        signalMessage = 1;
+    else
+        signalMessage = 0;
+
     return bytes;
+}
+
+void clearBuffer(int fd) {
+    unsigned char temp[1] = {0};
+    while (read(fd, temp, 1) != 0);
 }

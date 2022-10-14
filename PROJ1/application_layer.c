@@ -88,8 +88,10 @@ int build_data_packet(const char *filename, unsigned char* packet){
 void applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename)
 {
     printf("role is %s\n", role);
-    if (!strcmp(role, "tx")){
-        printf("in transmitter\n");
+    if (strcmp(role, "tx") == 0){
+        //FILE * ptr = fopen(filename, "rb");
+        //if (ptr == NULL) return;
+
         int fd = llopen(serialPort, TRANSMITTER);
         
         if (fd < 0) {
@@ -97,6 +99,43 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
             exit(-1);
         }
 
+        unsigned char buffer[100] = "Mensagem Teste ~~~~";
+
+        int bytes = 1;
+        int count = 0;
+        //bytes = fread(buffer, 1, 100, ptr);
+        while( bytes != 0 && count < 100) {
+            if (llwrite(fd, buffer, strlen(buffer)) == -1) break;
+            //memset(buffer, 0, 100);
+            //bytes = fread(buffer, 1, 100, ptr);
+            count++;
+        }
+        printf("here\n");
+        //fclose(ptr);
+        llclose(fd);
+    }
+    else if (strcmp(role, "rx") == 0) {
+        unsigned char buffer[100] = {0};
+        //FILE * ptr = fopen(filename, "ab");
+       // if (ptr == NULL) return;
+
+        int fd = llopen(serialPort, RECEIVER);
+        
+        if (fd < 0) {
+            printf("Error!\n");
+            exit(-1);
+        }
+        
+        int bytes = 0;
+        while(bytes = llread(fd, buffer)) {
+            printf("%s %d\n", buffer, bytes);
+            //fwrite(buffer, 1, 100, ptr);
+        }
+       // fclose(ptr);
+        llclose(fd);
+    }
+
+    /*
         unsigned char* start_packet = build_control_packet(filename, START_PACKET);
 
         printf("Control packet:\n");
@@ -127,4 +166,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate, in
 
         llclose(fd);
     }
+    */
 }

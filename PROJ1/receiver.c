@@ -26,6 +26,9 @@ int main(int argc, char *argv[])
         exit(1);
     }
 
+    FILE * ptr = fopen("test.gif", "ab");
+    if (ptr == NULL) return 1;
+
     int fd = llopen(serialPortName, RECEIVER);
 
     if (fd < 0) {
@@ -34,15 +37,27 @@ int main(int argc, char *argv[])
     }
     unsigned char buf[BUF_SIZE] = {0};
 
-    llread(fd, buf);
+    int bytes = 0;
+    int count = 1;
+    while (bytes = llread(fd, buf)) {
+    fwrite(buf, 1, 100, ptr);
+    printf("Wrote to GIF file - %d\n", count++);
+   }
 
-    printf("String read: %s\n", buf);
+    /*
+
+    for (int i = 0; i < 100; i++) {
+        llread(fd, buf);
+        printf("String read: %s\n", buf);
+    }
+
+    */
 
     llclose(fd);
 
     // testing application layer
-    printf("Testing application layer...\n");
+    //printf("Testing application layer...\n");
     
-    applicationLayer(serialPortName, "rx", 0,0,0, "penguin.gif");
+   // applicationLayer(serialPortName, "rx", 0,0,0, "test.gif");
     return 0;
 }
