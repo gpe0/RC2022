@@ -25,39 +25,8 @@ int main(int argc, char *argv[])
                argv[0]);
         exit(1);
     }
-
-    FILE * ptr = fopen("test.gif", "ab");
-    if (ptr == NULL) return 1;
-
-    int fd = llopen(serialPortName, RECEIVER);
-
-    if (fd < 0) {
-        printf("Error!\n");
-        return -1;
-    }
-    unsigned char buf[BUF_SIZE] = {0};
-
-    int bytes = 0;
-    int count = 1;
-    while (bytes = llread(fd, buf)) {
-    fwrite(buf, 1, 100, ptr);
-    printf("Wrote to GIF file - %d\n", count++);
-   }
-
-    /*
-
-    for (int i = 0; i < 100; i++) {
-        llread(fd, buf);
-        printf("String read: %s\n", buf);
-    }
-
-    */
-
-    llclose(fd);
-
-    // testing application layer
-    //printf("Testing application layer...\n");
     
-   // applicationLayer(serialPortName, "rx", 0,0,0, "test.gif");
+    applicationLayer(serialPortName, "rx", 0,0,0, "test2.gif");
+    
     return 0;
 }

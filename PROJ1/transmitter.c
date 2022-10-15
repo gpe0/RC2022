@@ -28,36 +28,8 @@ int main(int argc, char *argv[])
                argv[0]);
         exit(1);
     }
-
-    FILE * ptr = fopen("penguin.gif", "rb");
-    if (ptr == NULL) return 1;
-
-    int fd = llopen(serialPortName, TRANSMITTER);
-
-    if (fd < 0) {
-        printf("Error!\n");
-        return -1;
-    }
-
-    unsigned char buf[100] = {0};
-
-    int bytes = 0;
-    bytes = fread(buf, 1, 100, ptr);
-
-    while (bytes) {
-        llwrite(fd, buf, bytes);
-        memset(buf, 0, 100);
-        bytes = fread(buf, 1, 100, ptr);
-        printf("bytes - %d\n", bytes);
-    }
-
-
-    llclose(fd);
-    fclose(ptr);
-
-    // testing application layer
-    //printf("Testing application layer...\n");
     
-    //applicationLayer(serialPortName, "tx", 0,0,0, "penguin.gif");
+    applicationLayer(serialPortName, "tx", 0,0,0, "penguin.gif");
+    
     return 0;
 }
