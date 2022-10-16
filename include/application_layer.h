@@ -4,14 +4,13 @@
 #ifndef _APPLICATION_LAYER_H_
 #define _APPLICATION_LAYER_H_
 
+#define DATA_FIELD_SIZE 100
 #define DATA_PACKET 1
 #define START_PACKET 2
 #define END_PACKET 3
 
 #define TLV_FILE_SIZE 0
 #define TLV_FILE_NAME 1
-
-#include "api.h"
 
 // Application layer main function.
 // Arguments:
@@ -21,12 +20,14 @@
 //   nTries: Maximum number of frame retries.
 //   timeout: Frame timeout.
 //   filename: Name of the file to send / receive.
-int applicationLayer(const char *serialPort, const char *role, int baudRate,
+void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-int buildControlPacket(const char *filename, int flag, unsigned char* packet, int packet_size);
+int sendDataPacket(int fd, unsigned char *buffer, unsigned int N, unsigned int length);
 
 int getControlPacketSize(const char *filename);
+
+int buildControlPacket(const char *filename, int flag, unsigned char* packet, int packet_size);
 
 unsigned int getFileSize(const char *filename);
 

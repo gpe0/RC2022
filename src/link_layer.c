@@ -1,5 +1,3 @@
-// Write to serial port in non-canonical mode
-
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -9,7 +7,7 @@
 #include <termios.h>
 #include <unistd.h>
 #include <signal.h>
-#include "api.h"
+#include "link_layer.h"
 
 int alarmEnabled = FALSE;
 int alarmCount = 0;
@@ -274,6 +272,8 @@ int stateMachine(unsigned char byte, int cState, unsigned char C)
         }
     case RESEND:
         return RESEND;
+    default: 
+        return START_ST;
     }
 }
 

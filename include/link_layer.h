@@ -1,3 +1,24 @@
+// Link layer header.
+// NOTE: This file must not be changed.
+
+#ifndef _LINK_LAYER_H_
+#define _LINK_LAYER_H_
+
+typedef enum
+{
+    LlTx,
+    LlRx,
+} LinkLayerRole;
+
+typedef struct
+{
+    char serialPort[50];
+    LinkLayerRole role;
+    int baudRate;
+    int nRetransmissions;
+    int timeout;
+} LinkLayer;
+
 #define BAUDRATE B38400
 #define _POSIX_SOURCE 1 // POSIX compliant source
 
@@ -69,3 +90,5 @@ int stateMachine(unsigned char byte, int cState, unsigned char C);
 int copyArray(unsigned char * source, unsigned char * dest, unsigned int length);
 
 void clearBuffer(int fd);
+
+#endif
