@@ -6,22 +6,42 @@
 
 #include "application_layer.h"
 
-unsigned char *build_control_packet(const char *filename, int flag)
-{
+int sendControlPacket(int fd, const char* filename, int flag){
+    int packet_size = getControlPacketSize(filename);
+    if (packet_size < 0){
+        printf("Error data packet size!\n");
+        return 1;
+    }
+
+    unsigned char packet[packet_size];
+    buildControlPacket(filename, START_PACKET, packet, packet_size);
+    llwrite(fd, packet, packet_size);
+}
+
+unsigned int getFileSize(const char *filename){
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
     {
         printf("File Not Found!\n");
-        return NULL;
+        return -1;
     }
     // Get the file size
     fseek(fp, 0L, SEEK_END);
     unsigned int file_size = (unsigned int)ftell(fp);
     rewind(fp);
+    fclose(fp);
+    return file_size;
+}
 
+int getControlPacketSize(const char *filename){
+    unsigned int file_size = getFileSize(filename);
     int CONTROL_PACKET_SIZE = 3 + sizeof(file_size) + 2 + strlen(filename);
-    unsigned char *control_packet = (unsigned char *)malloc((CONTROL_PACKET_SIZE * sizeof(char)));
+    return CONTROL_PACKET_SIZE;
+}
 
+int buildControlPacket(const char *filename, int flag, unsigned char* control_packet, int packet_size)
+{
+    unsigned int file_size = getFileSize(filename);
     int index = 0;
     control_packet[index++] = flag;
 
@@ -43,22 +63,8 @@ unsigned char *build_control_packet(const char *filename, int flag)
         control_packet[index++] = filename[c];
     }
 
-    for (int i = 0; i < CONTROL_PACKET_SIZE; i++)
-    {
-        printf("%x ", control_packet[i]);
-    }
-    printf("\n");
-    /*
-    printf("Image data:\n");
-    for (int i=0; i < 20; i++){
-        printf("%x ", buffer[i]);
-    }
-    printf("\n");
-    */
-
-    // free(control_packet);
     printf("Control packet build!\n");
-    return control_packet;
+    return 0;
 }
 
 int applicationLayer(const char *serialPort, const char *role, int baudRate, int nTries, int timeout, const char *filename)
@@ -77,6 +83,8 @@ int applicationLayer(const char *serialPort, const char *role, int baudRate, int
             printf("Error!\n");
             return 1;
         }
+
+        sendControlPacket(fd, filename, START_PACKET);
 
         unsigned char buffer[100] = {0};
 
@@ -111,6 +119,14 @@ int applicationLayer(const char *serialPort, const char *role, int baudRate, int
 
         int bytes = 0;
         int count = 1;
+
+        // Read start control packet
+        bytes = llread(fd, buffer);
+        for (int i=0; i<20; i++){
+            printf("%x ", buffer[i]);
+        }
+        printf("\n");
+
         while (bytes = llread(fd, buffer))
         {
             fwrite(buffer, 1, bytes, ptr);

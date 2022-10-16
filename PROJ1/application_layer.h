@@ -24,7 +24,12 @@
 int applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename);
 
-unsigned char* build_control_packet(const char *filename, int flag);
+int buildControlPacket(const char *filename, int flag, unsigned char* packet, int packet_size);
 
+int getControlPacketSize(const char *filename);
+
+unsigned int getFileSize(const char *filename);
+
+int sendControlPacket(int fd, const char* filename, int flag);
 
 #endif // _APPLICATION_LAYER_H_
