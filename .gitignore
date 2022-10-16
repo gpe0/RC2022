@@ -1,4 +1,4 @@
-bin/
-penguin-received.gif
-.vscode
+*/bin/
+*/penguin-received.gif
+*/.vscode
 *.o
