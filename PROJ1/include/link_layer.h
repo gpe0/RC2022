@@ -19,16 +19,12 @@ typedef struct
     int timeout;
 } LinkLayer;
 
-#define BAUDRATE B38400
-#define _POSIX_SOURCE 1 // POSIX compliant source
 
 #define FALSE 0
 #define TRUE 1
 
-#define BAUDRATE B38400
-#define _POSIX_SOURCE 1 // POSIX compliant source
 
-#define BUF_SIZE 256
+#define BUF_SIZE 2000
 
 #define RECEIVER 0
 #define TRANSMITTER 1
@@ -63,7 +59,7 @@ typedef struct
 
 void timout(int signal);
 
-int llopen(const char * serial, unsigned char flag);
+int llopen(const char * serial, unsigned char flag, int baudRate, int nTries, int timeout);
 
 int llclose(int fd);
 
@@ -80,6 +76,8 @@ int sendDiscMessage(int fd);
 int sendIMessage(int fd, unsigned char * buffer, int length);
 
 int sendRRMessage(int fd);
+
+int sendLastRRMessage(int fd);
 
 int sendREJMessage(int fd);
 

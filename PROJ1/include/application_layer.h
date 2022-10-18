@@ -4,13 +4,15 @@
 #ifndef _APPLICATION_LAYER_H_
 #define _APPLICATION_LAYER_H_
 
-#define DATA_FIELD_SIZE 100
+#define DATA_FIELD_SIZE 1000
+#define DATA_HEADER_SIZE 4
+#define CONTROL_FIELD_SIZE 256
 #define DATA_PACKET 1
 #define START_PACKET 2
 #define END_PACKET 3
 
-#define TLV_FILE_SIZE 0
-#define TLV_FILE_NAME 1
+#define TLV_FILE_SIZE 1
+#define TLV_FILE_NAME 2
 
 // Application layer main function.
 // Arguments:
@@ -27,9 +29,7 @@ int sendDataPacket(int fd, unsigned char *buffer, unsigned int N, unsigned int l
 
 int getControlPacketSize(const char *filename);
 
-int buildControlPacket(const char *filename, int flag, unsigned char* packet, int packet_size);
-
-unsigned int getFileSize(const char *filename);
+int getFileSize(const char *filename);
 
 int sendControlPacket(int fd, const char* filename, int flag);
 

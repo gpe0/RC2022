@@ -10,6 +10,7 @@
 #include "link_layer.h"
 
 int alarmEnabled = FALSE;
+int alarmDetroyed = FALSE;
 int alarmCount = 0;
 
 int signalMessage = 0;
@@ -17,12 +18,15 @@ unsigned char role;
 
 struct termios oldtio;
 struct termios newtio;
+int NTRIES;
+int TIMEOUT;
 
 void timout(int signal)
 {
     alarmEnabled = FALSE;
     alarmCount++;
     printf("Alarm #%d\n", alarmCount);
+    if (alarmCount == 4) alarmDetroyed = TRUE;
 }
 int sendSetMessage(int fd)
 {
@@ -51,6 +55,17 @@ int sendRRMessage(int fd)
         RRField = RR_1;
     else
         RRField = RR_0;
+    unsigned char buf[BUF_SIZE] = {FLAG, A2, RRField, (A2 ^ RRField), FLAG};
+    write(fd, buf, CONTROL_FRAME_SIZE);
+    return 0;
+}
+
+int sendLastRRMessage(int fd) {
+    unsigned char RRField;
+    if (signalMessage == 0)
+        RRField = RR_0;
+    else
+        RRField = RR_1;
     unsigned char buf[BUF_SIZE] = {FLAG, A2, RRField, (A2 ^ RRField), FLAG};
     write(fd, buf, CONTROL_FRAME_SIZE);
     return 0;
@@ -132,8 +147,11 @@ int receiveMessage(int fd, unsigned char *buffer)
         IField = I_0;
     else
         IField = I_1;
+
+
     if (buffer[0] != FLAG || buffer[1] != A2 || buffer[2] != IField || buffer[3] != (A2 ^ IField)) {
         if (buffer[2] == DISC) return -2;
+        if (buffer[3] != IField) return -3;
         return -1;
     }
         
@@ -277,7 +295,7 @@ int stateMachine(unsigned char byte, int cState, unsigned char C)
     }
 }
 
-int llopen(const char *serial, unsigned char flag)
+int llopen(const char *serial, unsigned char flag, int baudRate, int nTries, int timeout)
 {
     // Open serial port device for reading and writing, and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
@@ -303,7 +321,7 @@ int llopen(const char *serial, unsigned char flag)
     // Clear struct for new port settings
     memset(&newtio, 0, sizeof(newtio));
 
-    newtio.c_cflag = BAUDRATE | CS8 | CLOCAL | CREAD;
+    newtio.c_cflag = baudRate | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
@@ -329,6 +347,9 @@ int llopen(const char *serial, unsigned char flag)
         return -1;
     }
 
+    NTRIES = nTries;
+    TIMEOUT = timeout;
+
     printf("New termios structure set\n");
 
     (void)signal(SIGALRM, timout);
@@ -342,7 +363,7 @@ int llopen(const char *serial, unsigned char flag)
             tcflush(fd, TCIOFLUSH);
             if (alarmEnabled == FALSE)
             {
-                alarm(3);
+                alarm(TIMEOUT);
                 sendSetMessage(fd);
                 alarmEnabled = TRUE;
                 memset(buf, 0, BUF_SIZE);
@@ -369,7 +390,6 @@ int llopen(const char *serial, unsigned char flag)
                 return fd;
             }
         }
-
         llclose(fd);
         return -1;
     }
@@ -401,13 +421,13 @@ int llclose(int fd)
     unsigned char buf[BUF_SIZE] = {0};
 
     if (role == TRANSMITTER) {
-        while (alarmCount < 4)
+        while (alarmCount < NTRIES)
         {
             tcflush(fd, TCIOFLUSH);
             if (alarmEnabled == FALSE)
             {
                 sendDiscMessage(fd);
-                alarm(3);
+                alarm(TIMEOUT);
                 int state = START_ST;
                 while (read(fd, buf, 1) != 0 && state != STOP_ST)
                 {
@@ -458,12 +478,12 @@ int llwrite(int fd, unsigned char *buffer, int length)
     (void)signal(SIGALRM, timout);
     unsigned char buf[BUF_SIZE] = {0};
 
-    while (alarmCount < 4)
+    while (alarmCount < NTRIES && alarmDetroyed == FALSE)
     {
         tcflush(fd, TCIOFLUSH);
         if (alarmEnabled == FALSE)
         {
-            alarm(3);
+            alarm(TIMEOUT);
             sendIMessage(fd, buffer, length);
             alarmEnabled = TRUE;
             memset(buf, 0, BUF_SIZE);
@@ -489,6 +509,7 @@ int llwrite(int fd, unsigned char *buffer, int length)
             } while (state != STOP_ST);
 
             alarm(0); // disable the alarm
+
             if (alarmEnabled == FALSE || state == RESEND)
             {
                 //clearBuffer(fd);
@@ -499,11 +520,10 @@ int llwrite(int fd, unsigned char *buffer, int length)
                 signalMessage = 1;
             else
                 signalMessage = 0;
-            printf("Bytes sent!\n");
             return length;
         }
     }
-
+    alarmDetroyed = FALSE;
     return -1;
 }
 
@@ -513,6 +533,7 @@ int llread(int fd, unsigned char *buffer)
     unsigned char temp_buf[BUF_SIZE] = {0};
     int bytes = 0;
     int nextByte = 0;
+    int started = FALSE;
 
     while (read(fd, temp_buf, 1) == 0);
 
@@ -523,16 +544,29 @@ int llread(int fd, unsigned char *buffer)
     
     bytes = receiveMessage(fd, buf);
 
+    if (bytes == -3) {
+        printf("resending RR\n");
+        sendLastRRMessage(fd);
+        nextByte = 0;
+        memset(buf, 0, BUF_SIZE);
+        while (read(fd, temp_buf, 1) == 0);
+        do
+        {
+            buf[nextByte++] = temp_buf[0];
+        } while (read(fd, temp_buf, 1) != 0);
+        bytes = receiveMessage(fd, buf);
+    }
     while (bytes == -1)
     {
         printf("sending rej\n");
         sendREJMessage(fd);
         nextByte = 0;
         memset(buf, 0, BUF_SIZE);
-        while (read(fd, temp_buf, 1) != 0)
+        while (read(fd, temp_buf, 1) == 0);
+        do
         {
             buf[nextByte++] = temp_buf[0];
-        }
+        } while (read(fd, temp_buf, 1) != 0);
         bytes = receiveMessage(fd, buf);
     }
     if (bytes == -2) return 0;

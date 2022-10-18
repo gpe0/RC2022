@@ -7,23 +7,49 @@
 #include "link_layer.h"
 
 int sendControlPacket(int fd, const char* filename, int flag){
-    const int packet_size = getControlPacketSize(filename);
-    if (packet_size < 0){
-        printf("Error data packet size!\n");
-        return 1;
+
+    unsigned int file_size = getFileSize(filename);
+    unsigned int file_size_copy = file_size;
+    int nFileSize = 0;
+    int mod = 0;
+
+    while (1) {
+        mod = file_size % 256;
+        file_size /= 256;
+        if (file_size == 0 && mod == 0) break;
+        nFileSize++;
     }
 
-    unsigned char packet[packet_size];
-    buildControlPacket(filename, START_PACKET, packet, packet_size);
-    llwrite(fd, packet, packet_size);
+    unsigned char packet[CONTROL_FIELD_SIZE] = {flag, TLV_FILE_SIZE};
+
+    int index = 2;
+
+    // TLV - file size
+    packet[index++] = nFileSize;
+
+    while (1) {
+        mod = file_size_copy % 256;
+        file_size_copy /= 256;
+        if (file_size_copy == 0 && mod == 0) break;
+        packet[index++] = mod;
+    }
+
+
+    // TLV - file name
+    packet[index++] = TLV_FILE_NAME;
+    packet[index++] = strlen(filename);
+    for (int c = 0; c < strlen(filename); c++)
+    { // build filename by byte
+        packet[index++] = filename[c];
+    }
+    return llwrite(fd, packet, index);
 }
 
-unsigned int getFileSize(const char *filename){
+int getFileSize(const char *filename){
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
     {
         printf("File Not Found!\n");
-        return NULL;
         return -1;
     }
     // Get the file size
@@ -34,44 +60,10 @@ unsigned int getFileSize(const char *filename){
     return file_size;
 }
 
-int getControlPacketSize(const char *filename){
-    unsigned int file_size = getFileSize(filename);
-    int CONTROL_PACKET_SIZE = 3 + sizeof(file_size) + 2 + strlen(filename);
-    unsigned char *control_packet = (unsigned char *)malloc((CONTROL_PACKET_SIZE * sizeof(char)));
-    return CONTROL_PACKET_SIZE;
-}
 
-int buildControlPacket(const char *filename, int flag, unsigned char* control_packet, int packet_size)
-{
-    unsigned int file_size = getFileSize(filename);
-    int index = 0;
-    control_packet[index++] = flag;
-
-    // TLV - file size
-    control_packet[index++] = TLV_FILE_SIZE;
-    control_packet[index++] = sizeof(file_size);
-    for (int b = 0; b < sizeof(file_size); b++)
-    { // build file size by byte
-        char byte = ((file_size << (b * 8)) & 0xff000000) >> 24;
-        // printf("byte: %x\n", ((file_size << (b*8))&0xff000000));
-        control_packet[index++] = byte;
-    }
-
-    // TLV - file name
-    control_packet[index++] = TLV_FILE_NAME;
-    control_packet[index++] = strlen(filename);
-    for (int c = 0; c < strlen(filename); c++)
-    { // build filename by byte
-        control_packet[index++] = filename[c];
-    }
-
-    printf("Control packet build!\n");
-    return 0;
-}
 
 int sendDataPacket(int fd, unsigned char *buffer, unsigned int N, unsigned int length) {
-    unsigned char buf[BUF_SIZE] = {DATA_PACKET, (N % 255), 0, length};
-
+    unsigned char buf[BUF_SIZE] = {DATA_PACKET, (N % 255), length / 256, length % 256};
     for (int i = 0; i < length; i++) {
         buf[4 + i] = buffer[i];
     }
@@ -90,7 +82,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         if (ptr == NULL)
             return;
 
-        int fd = llopen(serialPort, TRANSMITTER);
+        int fd = llopen(serialPort, TRANSMITTER, baudRate, nTries, timeout);
 
         if (fd < 0)
         {
@@ -102,16 +94,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         unsigned char buffer[DATA_FIELD_SIZE] = {0};
 
+
         int bytes = 0;
         int count = 0;
-        bytes = fread(buffer, 1, DATA_FIELD_SIZE, ptr);
+        bytes = fread(buffer, 1, DATA_FIELD_SIZE - DATA_HEADER_SIZE, ptr);
 
         while (bytes)
         {
             if (sendDataPacket(fd, buffer, count, bytes) == -1) break;
+            printf("Sent Packet number %d (%d bytes sent)\n", count, bytes + DATA_HEADER_SIZE);
             memset(buffer, 0, DATA_FIELD_SIZE);
-            bytes = fread(buffer, 1, DATA_FIELD_SIZE, ptr);
-            printf("Packet nmr %d\n", count);
+            bytes = fread(buffer, 1, DATA_FIELD_SIZE - DATA_HEADER_SIZE, ptr);
             count++;
         }
 
@@ -126,34 +119,88 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         if (ptr == NULL)
             return;
 
-        int fd = llopen(serialPort, RECEIVER);
+        int fd = llopen(serialPort, RECEIVER, baudRate, nTries, timeout);
 
         if (fd < 0)
         {
             printf("Error!\n");
             return;
         }
-        unsigned char buffer[BUF_SIZE] = {0};
+        unsigned char buffer[DATA_FIELD_SIZE] = {0};
 
         int bytes = 0;
         int nExpected = 0;
         while (bytes = llread(fd, buffer))
         {
-            unsigned char data[BUF_SIZE] = {0};
+            unsigned char data[DATA_FIELD_SIZE] = {0};
             for (int i = 0; i < buffer[2] * 256 + buffer[3]; i++) {
                 data[i] = buffer[i + 4];
             }
             if (buffer[0] == START_PACKET) {
-                printf("START PACKET\n");
+                printf("\n--START PACKET--\n\n");
+                unsigned char filename[CONTROL_FIELD_SIZE] = {0};
+                unsigned int filesize = 0;
+                int index = 1;
+                while (buffer[index] != '\0') {
+                    if (buffer[index] == TLV_FILE_NAME) {
+                        index++;
+                        int lim = buffer[index];      
+                        for (int i = 0; i < lim; i++) {
+                            filename[i] = buffer[++index];
+                        }
+                        index++;
+                    }
+                    else if (buffer[index] == TLV_FILE_SIZE) {
+                        index++;
+                        int lim = buffer[index];
+                        for (int i = 0; i < lim; i++) {
+                            int multiplier = 1;
+                            for (int j = 0; j < i; j++) {
+                                multiplier *= 256; 
+                            }
+                            filesize += multiplier * buffer[++index];
+                        }
+                        index++;
+                    }
+                }
+                printf("filename: %s\n", filename);
+                printf("filesize: %d bytes\n\n", filesize);
             }
             else if (buffer[0] == END_PACKET) {
-                printf("END PACKET\n");
+                printf("\n--END PACKET--\n\n");
+                unsigned char filename[CONTROL_FIELD_SIZE] = {0};
+                unsigned int filesize = 0;
+                int index = 1;
+                while (buffer[index] != '\0') {
+                    if (buffer[index] == TLV_FILE_NAME) {
+                        index++;
+                        int lim = buffer[index];      
+                        for (int i = 0; i < lim; i++) {
+                            filename[i] = buffer[++index];
+                        }
+                        index++;
+                    }
+                    else if (buffer[index] == TLV_FILE_SIZE) {
+                        index++;
+                        int lim = buffer[index];
+                        for (int i = 0; i < lim; i++) {
+                            int multiplier = 1;
+                            for (int j = 0; j < i; j++) {
+                                multiplier *= 256; 
+                            }
+                            filesize += multiplier * buffer[++index];
+                        }
+                        index++;
+                    }
+                }
+                printf("filename: %s\n", filename);
+                printf("filesize: %d bytes\n\n", filesize);
             }
             else if (buffer[0] == DATA_PACKET) {
                 if (buffer[1] != nExpected++) return;
 
                 fwrite(data, 1, buffer[2] * 256 + buffer[3], ptr);
-                printf("Wrote to GIF file\n");
+                printf("Wrote to GIF file - Packet number %d (%d bytes received)\n", buffer[1], bytes);
             }
             
         }
