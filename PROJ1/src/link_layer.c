@@ -18,8 +18,9 @@ unsigned char role;
 
 struct termios oldtio;
 struct termios newtio;
-int NTRIES;
-int TIMEOUT;
+
+LinkLayer linkLayer;
+
 
 void timout(int signal)
 {
@@ -131,9 +132,9 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
                 bcc2 ^= buffer[i];
         }
     }
+
     frame[nextByte++] = bcc2;
     frame[nextByte++] = FLAG;
-
     write(fd, frame, nextByte);
     return 0;
 }
@@ -194,10 +195,10 @@ int receiveMessage(int fd, unsigned char *buffer)
         }
         i++;
     }
-    copyArray(temp_buf, buffer, nextByte);
     if (buffer[++i] != FLAG) {
         return -1;
     }
+    copyArray(temp_buf, buffer, nextByte);
     return length;
 }
 
@@ -295,19 +296,20 @@ int stateMachine(unsigned char byte, int cState, unsigned char C)
     }
 }
 
-int llopen(const char *serial, unsigned char flag, int baudRate, int nTries, int timeout)
+int llopen(LinkLayer linkOptions)
 {
+    linkLayer = linkOptions;
     // Open serial port device for reading and writing, and not as controlling tty
     // because we don't want to get killed if linenoise sends CTRL-C.
-    int fd = open(serial, O_RDWR | O_NOCTTY);
+    int fd = open(linkLayer.serialPort, O_RDWR | O_NOCTTY);
+
 
     alarmCount = 0;
     alarmEnabled = FALSE;
-    role = flag;
 
     if (fd < 0)
     {
-        perror(serial);
+        perror(linkLayer.serialPort);
         exit(-1);
     }
 
@@ -321,7 +323,7 @@ int llopen(const char *serial, unsigned char flag, int baudRate, int nTries, int
     // Clear struct for new port settings
     memset(&newtio, 0, sizeof(newtio));
 
-    newtio.c_cflag = baudRate | CS8 | CLOCAL | CREAD;
+    newtio.c_cflag = linkLayer.baudRate | CS8 | CLOCAL | CREAD;
     newtio.c_iflag = IGNPAR;
     newtio.c_oflag = 0;
 
@@ -347,23 +349,19 @@ int llopen(const char *serial, unsigned char flag, int baudRate, int nTries, int
         return -1;
     }
 
-    NTRIES = nTries;
-    TIMEOUT = timeout;
-
     printf("New termios structure set\n");
 
     (void)signal(SIGALRM, timout);
 
     unsigned char buf[BUF_SIZE] = {0};
 
-    if (flag == TRANSMITTER)
+    if (linkLayer.role == LlTx)
     {
-        while (alarmCount < 4)
+        while (alarmCount < linkLayer.nRetransmissions)
         {
-            tcflush(fd, TCIOFLUSH);
             if (alarmEnabled == FALSE)
             {
-                alarm(TIMEOUT);
+                alarm(linkLayer.timeout);
                 sendSetMessage(fd);
                 alarmEnabled = TRUE;
                 memset(buf, 0, BUF_SIZE);
@@ -393,7 +391,7 @@ int llopen(const char *serial, unsigned char flag, int baudRate, int nTries, int
         llclose(fd);
         return -1;
     }
-    else if (flag == RECEIVER)
+    else if (linkLayer.role == LlRx)
     {
         int received = FALSE;
         while (received == FALSE)
@@ -420,14 +418,13 @@ int llclose(int fd)
     alarmEnabled = FALSE;
     unsigned char buf[BUF_SIZE] = {0};
 
-    if (role == TRANSMITTER) {
-        while (alarmCount < NTRIES)
+    if (linkLayer.role == LlTx) {
+        while (alarmCount < linkLayer.nRetransmissions)
         {
-            tcflush(fd, TCIOFLUSH);
             if (alarmEnabled == FALSE)
             {
                 sendDiscMessage(fd);
-                alarm(TIMEOUT);
+                alarm(linkLayer.timeout);
                 int state = START_ST;
                 while (read(fd, buf, 1) != 0 && state != STOP_ST)
                 {
@@ -478,12 +475,11 @@ int llwrite(int fd, unsigned char *buffer, int length)
     (void)signal(SIGALRM, timout);
     unsigned char buf[BUF_SIZE] = {0};
 
-    while (alarmCount < NTRIES && alarmDetroyed == FALSE)
+    while (alarmCount < linkLayer.nRetransmissions && alarmDetroyed == FALSE)
     {
-        tcflush(fd, TCIOFLUSH);
         if (alarmEnabled == FALSE)
         {
-            alarm(TIMEOUT);
+            alarm(linkLayer.timeout);
             sendIMessage(fd, buffer, length);
             alarmEnabled = TRUE;
             memset(buf, 0, BUF_SIZE);
@@ -512,7 +508,6 @@ int llwrite(int fd, unsigned char *buffer, int length)
 
             if (alarmEnabled == FALSE || state == RESEND)
             {
-                //clearBuffer(fd);
                 alarmEnabled = FALSE;
                 continue;
             }
@@ -523,7 +518,7 @@ int llwrite(int fd, unsigned char *buffer, int length)
             return length;
         }
     }
-    alarmDetroyed = FALSE;
+    alarmDetroyed = TRUE;
     return -1;
 }
 
@@ -534,18 +529,22 @@ int llread(int fd, unsigned char *buffer)
     int bytes = 0;
     int nextByte = 0;
     int started = FALSE;
-
+    //sleep(5);
     while (read(fd, temp_buf, 1) == 0);
-
+    //sleep(5);
     do
     {
+        if (started == FALSE && temp_buf[0] == FLAG) started = TRUE;
+        else if (started == TRUE && temp_buf[0] == FLAG) {
+            buf[nextByte++] = temp_buf[0];
+            break;
+        }
         buf[nextByte++] = temp_buf[0];
     } while (read(fd, temp_buf, 1) != 0);
-    
+    //sleep(5);
     bytes = receiveMessage(fd, buf);
-
+    //sleep(5);
     if (bytes == -3) {
-        printf("resending RR\n");
         sendLastRRMessage(fd);
         nextByte = 0;
         memset(buf, 0, BUF_SIZE);
@@ -558,7 +557,6 @@ int llread(int fd, unsigned char *buffer)
     }
     while (bytes == -1)
     {
-        printf("sending rej\n");
         sendREJMessage(fd);
         nextByte = 0;
         memset(buf, 0, BUF_SIZE);

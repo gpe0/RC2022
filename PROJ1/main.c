@@ -6,7 +6,7 @@
 
 #include "application_layer.h"
 
-#define BAUDRATE 9600
+#define BAUDRATE 115200
 #define N_TRIES 3
 #define TIMEOUT 4
 
@@ -16,15 +16,16 @@
 //   $3: filename
 int main(int argc, char *argv[])
 {
-    if (argc < 4)
+    if (argc < 3)
     {
-        printf("Usage: %s /dev/ttySxx tx|rx filename\n", argv[0]);
+        printf("Usage: %s /dev/ttySxx tx|rx filename (optional)\n", argv[0]);
         exit(1);
     }
 
     const char *serialPort = argv[1];
     const char *role = argv[2];
-    const char *filename = argv[3];
+    char *filename;
+    if (argc > 3) filename = argv[3];
 
     printf("Starting link-layer protocol application\n"
            "  - Serial port: %s\n"

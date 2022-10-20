@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>  
 #include "application_layer.h"
 #include "link_layer.h"
 
@@ -75,6 +76,7 @@ int sendDataPacket(int fd, unsigned char *buffer, unsigned int N, unsigned int l
 void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
+    struct timeval begin, end;
     printf("role is %s\n", role);
     if (strcmp(role, "tx") == 0)
     {
@@ -82,7 +84,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         if (ptr == NULL)
             return;
 
-        int fd = llopen(serialPort, TRANSMITTER, baudRate, nTries, timeout);
+        LinkLayer linkOptions;
+        linkOptions.baudRate = baudRate;
+        linkOptions.role = LlTx;
+        linkOptions.nRetransmissions = nTries;
+        linkOptions.timeout = timeout;
+        strcpy(linkOptions.serialPort, serialPort);
+
+        int fd = llopen(linkOptions);
 
         if (fd < 0)
         {
@@ -91,6 +100,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         }
 
         sendControlPacket(fd, filename, START_PACKET);
+        printf("Start Packet Sent\n");
 
         unsigned char buffer[DATA_FIELD_SIZE] = {0};
 
@@ -102,13 +112,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         while (bytes)
         {
             if (sendDataPacket(fd, buffer, count, bytes) == -1) break;
-            printf("Sent Packet number %d (%d bytes sent)\n", count, bytes + DATA_HEADER_SIZE);
+            printf("Packet number %d Sent (%d bytes sent)\n", count, bytes + DATA_HEADER_SIZE);
             memset(buffer, 0, DATA_FIELD_SIZE);
             bytes = fread(buffer, 1, DATA_FIELD_SIZE - DATA_HEADER_SIZE, ptr);
             count++;
         }
 
         sendControlPacket(fd, filename, END_PACKET);
+        printf("End Packet Sent\n");
 
         llclose(fd);
         fclose(ptr);
@@ -119,7 +130,14 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         if (ptr == NULL)
             return;
 
-        int fd = llopen(serialPort, RECEIVER, baudRate, nTries, timeout);
+        LinkLayer linkOptions;
+        linkOptions.baudRate = baudRate;
+        linkOptions.role = LlRx;
+        linkOptions.nRetransmissions = nTries;
+        linkOptions.timeout = timeout;
+        strcpy(linkOptions.serialPort, serialPort);
+
+        int fd = llopen(linkOptions);
 
         if (fd < 0)
         {
@@ -130,7 +148,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
         int bytes = 0;
         int nExpected = 0;
-        while (bytes = llread(fd, buffer))
+        bytes = llread(fd, buffer);
+        clearBuffer(fd);
+        while (bytes)
         {
             unsigned char data[DATA_FIELD_SIZE] = {0};
             for (int i = 0; i < buffer[2] * 256 + buffer[3]; i++) {
@@ -165,6 +185,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 }
                 printf("filename: %s\n", filename);
                 printf("filesize: %d bytes\n\n", filesize);
+                gettimeofday(&begin, NULL);
             }
             else if (buffer[0] == END_PACKET) {
                 printf("\n--END PACKET--\n\n");
@@ -194,7 +215,9 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                     }
                 }
                 printf("filename: %s\n", filename);
-                printf("filesize: %d bytes\n\n", filesize);
+                printf("filesize: %d bytes\n", filesize);
+                gettimeofday(&end, NULL);
+                printf("Time Spent : %f Seconds\n\n",(double) ((((end.tv_sec - begin.tv_sec) * 1000000) + end.tv_usec) - (begin.tv_usec)) / 1000000);
             }
             else if (buffer[0] == DATA_PACKET) {
                 if (buffer[1] != nExpected++) return;
@@ -202,7 +225,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                 fwrite(data, 1, buffer[2] * 256 + buffer[3], ptr);
                 printf("Wrote to GIF file - Packet number %d (%d bytes received)\n", buffer[1], bytes);
             }
-            
+            bytes = llread(fd, buffer);
         }
         fclose(ptr);
         llclose(fd);
