@@ -16,6 +16,11 @@ int alarmCount = 0;
 int signalMessage = 0;
 unsigned char role;
 
+int PACKETS_RECEIVED = 0;
+int PACKETS_FAILED = 0;
+int PACKETS_SENT = 0;
+int PACKETS_RESENT = 0;
+
 struct termios oldtio;
 struct termios newtio;
 
@@ -32,6 +37,7 @@ void timout(int signal)
 int sendSetMessage(int fd)
 {
     unsigned char buf[BUF_SIZE] = {FLAG, A2, SET, (A2 ^ SET), FLAG};
+    PACKETS_SENT++;
     write(fd, buf, CONTROL_FRAME_SIZE);
     return 0;
 }
@@ -46,6 +52,7 @@ int sendUaMessage(int fd)
 int sendDiscMessage(int fd) {
     unsigned char buf[BUF_SIZE] = {FLAG, A2, DISC, (A2 ^ DISC), FLAG};
     write(fd, buf, CONTROL_FRAME_SIZE);
+    PACKETS_SENT++;
     return 0;
 }
 
@@ -135,6 +142,7 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
 
     frame[nextByte++] = bcc2;
     frame[nextByte++] = FLAG;
+    PACKETS_SENT++;
     write(fd, frame, nextByte);
     return 0;
 }
@@ -365,8 +373,11 @@ int llopen(LinkLayer linkOptions)
                 sendSetMessage(fd);
                 alarmEnabled = TRUE;
                 memset(buf, 0, BUF_SIZE);
-                if (alarmEnabled == FALSE)
+                if (alarmEnabled == FALSE) {
+                    PACKETS_RESENT++;
                     continue;
+                }
+
 
                 int state = START_ST;
                 while (read(fd, buf, 1) == 0) {
@@ -380,15 +391,18 @@ int llopen(LinkLayer linkOptions)
                         break;
                     read(fd, buf, 1);
                 }
-                if (alarmEnabled == FALSE)
+                if (alarmEnabled == FALSE) {
+                    PACKETS_RESENT++;
                     continue;
+                }
+       
 
                 alarm(0); // disable the alarm
                 printf("Connection stablished!\n");
                 return fd;
             }
         }
-        llclose(fd);
+        llclose(fd, FALSE);
         return -1;
     }
     else if (linkLayer.role == LlRx)
@@ -404,6 +418,7 @@ int llopen(LinkLayer linkOptions)
             if (state == STOP_ST)
                 received = TRUE;
         }
+        PACKETS_RECEIVED++;
 
         sendUaMessage(fd);
     }
@@ -411,7 +426,7 @@ int llopen(LinkLayer linkOptions)
     return fd;
 }
 
-int llclose(int fd)
+int llclose(int fd, int showStats)
 {
     (void)signal(SIGALRM, timout);
     alarmCount = 0;
@@ -423,36 +438,46 @@ int llclose(int fd)
         {
             if (alarmEnabled == FALSE)
             {
+                alarmEnabled = TRUE;
                 sendDiscMessage(fd);
                 alarm(linkLayer.timeout);
                 int state = START_ST;
                 while (read(fd, buf, 1) != 0 && state != STOP_ST)
                 {
                     state = stateMachine(buf[0], state, DISC);
-                    if (alarmEnabled == FALSE)
+                    if (alarmEnabled == FALSE) {
                         break;
+                    }
+
+                }
+                if (alarmEnabled == FALSE) {
+                    PACKETS_RESENT++;
+                    continue;
                 }
                 alarm(0);
                 sendUaMessage(fd);
                 break;
             }
         }
+        if (showStats == TRUE) {
+            printf("Packets sent: %d\n", PACKETS_SENT);
+            printf("Packets resent: %d\n", PACKETS_RESENT);
+            printf("Error (%%): %f\n", (float) PACKETS_RESENT / PACKETS_SENT);
+        }
     }
     else {
         int state = START_ST;
-        while (read(fd, buf, 1) != 0 && state != STOP_ST)
-        {
-            state = stateMachine(buf[0], state, DISC);
-            if (alarmEnabled == FALSE)
-                break;
-        }
-        state = START_ST;
         sendDiscMessage(fd);
         while (read(fd, buf, 1) != 0 && state != STOP_ST)
         {
             state = stateMachine(buf[0], state, UA);
             if (alarmEnabled == FALSE)
                 break;
+        }
+        if (showStats == TRUE) {
+            printf("Packets received: %d\n", PACKETS_RECEIVED);
+            printf("Packets with errors: %d\n", PACKETS_FAILED);
+            printf("Error (%%): %f\n", (float) PACKETS_FAILED / PACKETS_RECEIVED);
         }
     }
 
@@ -483,8 +508,10 @@ int llwrite(int fd, unsigned char *buffer, int length)
             sendIMessage(fd, buffer, length);
             alarmEnabled = TRUE;
             memset(buf, 0, BUF_SIZE);
-            if (alarmEnabled == FALSE)
+            if (alarmEnabled == FALSE) {
+                PACKETS_RESENT++;
                 continue;
+            }
 
             int state = START_ST;
             unsigned char RRField;
@@ -509,6 +536,7 @@ int llwrite(int fd, unsigned char *buffer, int length)
             if (alarmEnabled == FALSE || state == RESEND)
             {
                 alarmEnabled = FALSE;
+                PACKETS_RESENT++;
                 continue;
             }
             if (signalMessage == 0)
@@ -529,9 +557,7 @@ int llread(int fd, unsigned char *buffer)
     int bytes = 0;
     int nextByte = 0;
     int started = FALSE;
-    //sleep(5);
     while (read(fd, temp_buf, 1) == 0);
-    //sleep(5);
     do
     {
         if (started == FALSE && temp_buf[0] == FLAG) started = TRUE;
@@ -541,9 +567,8 @@ int llread(int fd, unsigned char *buffer)
         }
         buf[nextByte++] = temp_buf[0];
     } while (read(fd, temp_buf, 1) != 0);
-    //sleep(5);
     bytes = receiveMessage(fd, buf);
-    //sleep(5);
+    PACKETS_RECEIVED++;
     if (bytes == -3) {
         sendLastRRMessage(fd);
         nextByte = 0;
@@ -557,6 +582,7 @@ int llread(int fd, unsigned char *buffer)
     }
     while (bytes == -1)
     {
+        PACKETS_FAILED++;
         sendREJMessage(fd);
         nextByte = 0;
         memset(buf, 0, BUF_SIZE);
@@ -567,7 +593,10 @@ int llread(int fd, unsigned char *buffer)
         } while (read(fd, temp_buf, 1) != 0);
         bytes = receiveMessage(fd, buf);
     }
-    if (bytes == -2) return 0;
+    if (bytes == -2) {
+        llclose(fd, TRUE);
+        return 0;
+    }
 
     memset(buffer, 0, BUF_SIZE);
     copyArray(buf, buffer, bytes);

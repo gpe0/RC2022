@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "application_layer.h"
 
@@ -16,9 +17,9 @@
 //   $3: filename
 int main(int argc, char *argv[])
 {
-    if (argc < 3)
+    if (argc < 3 || (argc < 4 && strcmp(argv[2], "tx") == 0))
     {
-        printf("Usage: %s /dev/ttySxx tx|rx filename (optional)\n", argv[0]);
+        printf("Usage: %s /dev/ttySxx tx|rx filename (optional for receiver)\n", argv[0]);
         exit(1);
     }
 
@@ -26,6 +27,7 @@ int main(int argc, char *argv[])
     const char *role = argv[2];
     char *filename;
     if (argc > 3) filename = argv[3];
+    else filename = "to_be_defined";
 
     printf("Starting link-layer protocol application\n"
            "  - Serial port: %s\n"

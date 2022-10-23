@@ -77,7 +77,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                       int nTries, int timeout, const char *filename)
 {
     struct timeval begin, end;
-    printf("role is %s\n", role);
     if (strcmp(role, "tx") == 0)
     {
         FILE *ptr = fopen(filename, "rb");
@@ -121,14 +120,17 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
         sendControlPacket(fd, filename, END_PACKET);
         printf("End Packet Sent\n");
 
-        llclose(fd);
+        llclose(fd, TRUE);
         fclose(ptr);
     }
     else if (strcmp(role, "rx") == 0)
     {
-        FILE *ptr = fopen(filename, "ab");
-        if (ptr == NULL)
-            return;
+        FILE *ptr;
+        if (strcmp(filename, "to_be_defined") != 0) {
+            ptr = fopen(filename, "ab");
+            if (ptr == NULL)
+                return;
+        }
 
         LinkLayer linkOptions;
         linkOptions.baudRate = baudRate;
@@ -158,7 +160,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             }
             if (buffer[0] == START_PACKET) {
                 printf("\n--START PACKET--\n\n");
-                unsigned char filename[CONTROL_FIELD_SIZE] = {0};
+                unsigned char fileName[CONTROL_FIELD_SIZE] = {0};
                 unsigned int filesize = 0;
                 int index = 1;
                 while (buffer[index] != '\0') {
@@ -166,7 +168,7 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                         index++;
                         int lim = buffer[index];      
                         for (int i = 0; i < lim; i++) {
-                            filename[i] = buffer[++index];
+                            fileName[i] = buffer[++index];
                         }
                         index++;
                     }
@@ -183,7 +185,12 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
                         index++;
                     }
                 }
-                printf("filename: %s\n", filename);
+                    if (strcmp(filename, "to_be_defined") == 0) {
+                        ptr = fopen(fileName, "ab");
+                        if (ptr == NULL)
+                            return;
+                    }
+                printf("filename: %s\n", fileName);
                 printf("filesize: %d bytes\n\n", filesize);
                 gettimeofday(&begin, NULL);
             }
@@ -228,6 +235,5 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
             bytes = llread(fd, buffer);
         }
         fclose(ptr);
-        llclose(fd);
     }
 }

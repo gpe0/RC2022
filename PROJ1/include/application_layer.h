@@ -27,8 +27,6 @@ void applicationLayer(const char *serialPort, const char *role, int baudRate,
 
 int sendDataPacket(int fd, unsigned char *buffer, unsigned int N, unsigned int length);
 
-int getControlPacketSize(const char *filename);
-
 int getFileSize(const char *filename);
 
 int sendControlPacket(int fd, const char* filename, int flag);

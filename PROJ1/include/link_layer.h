@@ -57,7 +57,7 @@ void timout(int signal);
 
 int llopen(LinkLayer linkOptions);
 
-int llclose(int fd);
+int llclose(int fd, int showStats);
 
 int llwrite(int fd, unsigned char * buffer, int length);
 
