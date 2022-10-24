@@ -10,7 +10,6 @@
 #include "link_layer.h"
 
 int alarmEnabled = FALSE;
-int alarmDetroyed = FALSE;
 int alarmCount = 0;
 
 int signalMessage = 0;
@@ -32,7 +31,6 @@ void timout(int signal)
     alarmEnabled = FALSE;
     alarmCount++;
     printf("Alarm #%d\n", alarmCount);
-    if (alarmCount == 4) alarmDetroyed = TRUE;
 }
 int sendSetMessage(int fd)
 {
@@ -147,10 +145,12 @@ int sendIMessage(int fd, unsigned char *buffer, int length)
     return 0;
 }
 
-int receiveMessage(int fd, unsigned char *buffer)
+int receiveMessage(int fd, unsigned char *buffer, int bufSize)
 {
     unsigned char IField;
     unsigned char temp_buf[BUF_SIZE] = {0};
+    
+    if (bufSize < 5) return -1;
 
     if (signalMessage == 0)
         IField = I_0;
@@ -163,6 +163,8 @@ int receiveMessage(int fd, unsigned char *buffer)
         if (buffer[3] != IField) return -3;
         return -1;
     }
+    
+
         
 
     int hadESC = FALSE;
@@ -172,8 +174,8 @@ int receiveMessage(int fd, unsigned char *buffer)
     int nextByte = 0;
     while (1)
     {
-        
-        if (buffer[i + 1] == FLAG && buffer[i + 2] == '\0') {
+        if (i >= bufSize - 1) return -1;
+        if (buffer[i + 1] == FLAG) {
             if (buffer[i] != bcc2) return -1;
             break;
         }
@@ -203,6 +205,7 @@ int receiveMessage(int fd, unsigned char *buffer)
         }
         i++;
     }
+    
     if (buffer[++i] != FLAG) {
         return -1;
     }
@@ -462,7 +465,7 @@ int llclose(int fd, int showStats)
         if (showStats == TRUE) {
             printf("Packets sent: %d\n", PACKETS_SENT);
             printf("Packets resent: %d\n", PACKETS_RESENT);
-            printf("Error (%%): %f\n", (float) PACKETS_RESENT / PACKETS_SENT);
+            printf("Error (%%): %f\n", (float) PACKETS_RESENT / PACKETS_SENT * 100);
         }
     }
     else {
@@ -477,7 +480,7 @@ int llclose(int fd, int showStats)
         if (showStats == TRUE) {
             printf("Packets received: %d\n", PACKETS_RECEIVED);
             printf("Packets with errors: %d\n", PACKETS_FAILED);
-            printf("Error (%%): %f\n", (float) PACKETS_FAILED / PACKETS_RECEIVED);
+            printf("Error (%%): %f\n", (float) PACKETS_FAILED / PACKETS_RECEIVED * 100);
         }
     }
 
@@ -500,7 +503,7 @@ int llwrite(int fd, unsigned char *buffer, int length)
     (void)signal(SIGALRM, timout);
     unsigned char buf[BUF_SIZE] = {0};
 
-    while (alarmCount < linkLayer.nRetransmissions && alarmDetroyed == FALSE)
+    while (alarmCount < linkLayer.nRetransmissions)
     {
         if (alarmEnabled == FALSE)
         {
@@ -546,7 +549,6 @@ int llwrite(int fd, unsigned char *buffer, int length)
             return length;
         }
     }
-    alarmDetroyed = TRUE;
     return -1;
 }
 
@@ -567,37 +569,39 @@ int llread(int fd, unsigned char *buffer)
         }
         buf[nextByte++] = temp_buf[0];
     } while (read(fd, temp_buf, 1) != 0);
-    bytes = receiveMessage(fd, buf);
+    bytes = receiveMessage(fd, buf, nextByte);
     PACKETS_RECEIVED++;
-    if (bytes == -3) {
-        sendLastRRMessage(fd);
-        nextByte = 0;
-        memset(buf, 0, BUF_SIZE);
-        while (read(fd, temp_buf, 1) == 0);
-        do
-        {
-            buf[nextByte++] = temp_buf[0];
-        } while (read(fd, temp_buf, 1) != 0);
-        bytes = receiveMessage(fd, buf);
-    }
-    while (bytes == -1)
+    while (bytes == -1 || bytes == -3)
     {
-        PACKETS_FAILED++;
-        sendREJMessage(fd);
-        nextByte = 0;
-        memset(buf, 0, BUF_SIZE);
-        while (read(fd, temp_buf, 1) == 0);
-        do
-        {
-            buf[nextByte++] = temp_buf[0];
-        } while (read(fd, temp_buf, 1) != 0);
-        bytes = receiveMessage(fd, buf);
+        if (bytes == -3) {
+            sendLastRRMessage(fd);
+            nextByte = 0;
+            memset(buf, 0, BUF_SIZE);
+            while (read(fd, temp_buf, 1) == 0);
+            do
+            {
+                buf[nextByte++] = temp_buf[0];
+            } while (read(fd, temp_buf, 1) != 0);
+            bytes = receiveMessage(fd, buf, nextByte);
+        }
+        else {
+        
+            PACKETS_FAILED++;
+            sendREJMessage(fd);
+            nextByte = 0;
+            memset(buf, 0, BUF_SIZE);
+            while (read(fd, temp_buf, 1) == 0);
+            do
+            {
+                buf[nextByte++] = temp_buf[0];
+            } while (read(fd, temp_buf, 1) != 0);
+            bytes = receiveMessage(fd, buf, nextByte);
+        }
     }
     if (bytes == -2) {
         llclose(fd, TRUE);
         return 0;
     }
-
     memset(buffer, 0, BUF_SIZE);
     copyArray(buf, buffer, bytes);
     sendRRMessage(fd);

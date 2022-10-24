@@ -77,7 +77,7 @@ int sendLastRRMessage(int fd);
 
 int sendREJMessage(int fd);
 
-int receiveMessage(int fd, unsigned char * buffer);
+int receiveMessage(int fd, unsigned char * buffer, int bufSize);
 
 int stateMachine(unsigned char byte, int cState, unsigned char C);
 
