@@ -2,9 +2,11 @@
 #define SERVER_ADDR "193.137.29.15"
 #define BUF_SIZE 1000
 
+int connectTo(char * address, int port);
+
 int isCode(char * response, char * code);
 
-int getDataAddress(char * response, char * address, int * port);
+int getDataAddress(char * response, char * address);
 
 int sendMessage(int sockfd, char * message);
 
