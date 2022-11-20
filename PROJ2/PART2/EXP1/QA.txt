@@ -1,0 +1,23 @@
+» What are the ARP packets and what are they used for?
+ARP packets are used when a computer is sending a packet to an unknown target (don't have his MAC address).
+So the computer sends an ARP packet to every computer in the network (broadcast) and waits for a response telling his MAC
+(172.16.50.254 is at 00:22:64:19:09:5c)
+
+» What are the MAC and IP addresses of ARP packets and why?
+The source sends a broadcast message (everyone is the destination) and then the unknown target sends back the response to the source
+
+» What packets does the ping command generate?
+ICMP Packets
+
+» What are the MAC and IP addresses of the ping packets?
+The source (172.16.50.1 | 00:21:5a:61:2c:54) sends a packet to the destination (172.16.50.254 | 00:22:64:19:09:5c).
+Then a reply message is sent, from the (172.16.50.254 | 00:22:64:19:09:5c) to (172.16.50.1 | 00:21:5a:61:2c:54)
+
+» How to determine if a receiving Ethernet frame is ARP, IP, ICMP?
+Using a packet analyzer like Wireshark, we can check the frame protocol (ARP, ICMP, STP, ...)
+
+» How to determine the length of a receiving frame?
+In wireshark, we can check the column Length and see the packet size
+
+» What is the loopback interface and why is it important?
+
