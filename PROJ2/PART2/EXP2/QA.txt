@@ -1,0 +1,8 @@
+» How to configure bridgeY0?
+Primeiro criamos uma bridge (bridgeY0)
+Depois removemos as portas da bridge default
+Adicionamos essas mesmas portas à bridge que criamos
+
+» How many broadcast domains are there? How can you conclude it from the logs?
+Temos 2 broadcast domains, o 172.16.Y0.0/24 e 172.16.Y1.0/24
+

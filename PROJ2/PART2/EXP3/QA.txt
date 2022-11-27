@@ -1,0 +1,16 @@
+» What routes are there in the tuxes? What are their meaning?
+In tux 3, if the destination is is 172.16.51.0/24, then if should be forward to 172.16.50.254
+In tux 2, if the destination is is 172.16.50.0/24, then if should be forward to 172.16.51.253
+In tux 4, no extra routes are needed.
+
+
+» What information does an entry of the forwarding table contain?
+Na tabela, uma entrada tem um destino, um gateway, uma mascara, uma flag, metric, use e Iface.
+
+» What ARP messages, and associated MAC addresses, are observed and why?
+
+
+» What ICMP packets are observed and why?
+foi possível verificar a conectividade entre todas as máquinas (172.16.50.254, 172.16.51.253 e 172.16.51.1)
+
+» What are the IP and MAC addresses associated to ICMP packets and why? 
