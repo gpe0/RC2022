@@ -1,19 +1,44 @@
 #include <stdio.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netdb.h>
 #include <arpa/inet.h>
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
 #include "download.h"
 
+int findChar(char * word, char v) {
+    for (int i = 0; i < strlen(word); i++) {
+        if (word[i] == v) return i;
+    }
+    return -1;
+}
+
+int substr(char * old, char * new, int start, int end) {
+    int j = 0;
+    for (int i = start; i < end; i++) {
+        new[j++] = old[i];
+    }
+    return 0;
+}
+
 int connectTo(char * address, int port) {
     int sockfd;
     struct sockaddr_in server_addr;
+    struct hostent *h;
+  
+    if ((h = gethostbyname(address)) == NULL) {
+        herror("gethostbyname()");
+        exit(-1);
+    }
+
+    printf("Connecting to %s\n", h->h_name);  
+
     /*server address handling*/
     bzero((char *) &server_addr, sizeof(server_addr));
     server_addr.sin_family = AF_INET;
-    server_addr.sin_addr.s_addr = inet_addr(address);    /*32 bit Internet address network byte ordered*/
+    server_addr.sin_addr.s_addr = inet_addr(inet_ntoa(*((struct in_addr *) h->h_addr)));    /*32 bit Internet address network byte ordered*/
     server_addr.sin_port = htons(port);        /*server TCP port must be network byte ordered */
 
     /*open a TCP socket*/
@@ -28,6 +53,8 @@ int connectTo(char * address, int port) {
         perror("connect()");
         exit(-1);
     }
+
+    printf("Connection successfully!\n");  
     return sockfd;
 }
 
@@ -74,16 +101,26 @@ int sendMessage(int sockfd, char * message) {
     return 0;
 }
 
-int login(int sockfd) {
+int login(int sockfd, char * user, char * password) {
     /*send a string to the server*/
     size_t bytes;
-    char buf[BUF_SIZE];
-    sendMessage(sockfd, "user anonymous\n");
+    char buf[BUF_SIZE] = {0};
+    strcat(buf, "user ");
+    strcat(buf, user);
+    strcat(buf, "\n");
+    printf("Login with user : %s and password : %s\n", user, password);
+    sendMessage(sockfd, buf);
     sleep(1);
+    memset(buf, 0,BUF_SIZE); //clear socket
     recv(sockfd, buf, BUF_SIZE, MSG_DONTROUTE);
     memset(buf, 0,BUF_SIZE); //clear socket
 
-    sendMessage(sockfd, "pass password\n");
+    strcat(buf, "pass ");
+    strcat(buf, password);
+    strcat(buf, "\n");
+
+    sendMessage(sockfd, buf);
+    memset(buf, 0,BUF_SIZE); //clear socket
     sleep(1);
     recv(sockfd, buf, BUF_SIZE, MSG_DONTROUTE);
     if (isCode(buf, "230") == 1) {
@@ -93,22 +130,45 @@ int login(int sockfd) {
     return 0;
 }
 
+int parseInput(char * input, char * user, char * password, char * host, char * file) {
+    char cleanInput[BUF_SIZE] = {0};
+    substr(input, cleanInput, 6, strlen(input));
+    char pathWithSlash[BUF_SIZE] = {0};
+    strcpy(pathWithSlash, strstr(cleanInput, "/"));
+    if (strstr(input, "@")) {
+        substr(cleanInput, user, 0, findChar(cleanInput, ':'));
+        substr(cleanInput, password, findChar(cleanInput, ':') + 1, findChar(cleanInput, '@'));
+        substr(cleanInput, host, findChar(cleanInput, '@') + 1, findChar(cleanInput, '/'));
+        substr(pathWithSlash, file, 1, strlen(pathWithSlash));
+    }
+    else {
+        strcpy(user, "anonymous");
+        strcpy(password, "password"); // login creds not provided
+        substr(cleanInput, host, 0, findChar(cleanInput, '/'));
+        substr(pathWithSlash, file, 1, strlen(pathWithSlash));
+    }
+    
+
+}
+
 int main(int argc, char **argv) {
 
     if (argc != 2) {
-        fprintf(stderr, "Usage: %s <file to download>\n", argv[0]);
+        fprintf(stderr, "Usage: %s ftp://[<user>:<password>@]<host>/<url-path>\n", argv[0]);
         exit(-1);
     }
     int sockfdCommands, sockfdData;
-    char buf[BUF_SIZE];
-    char address[BUF_SIZE];
+    char buf[BUF_SIZE] = {0}, address[BUF_SIZE] = {0}, user[BUF_SIZE] = {0}, password[BUF_SIZE] = {0}, host[BUF_SIZE] = {0}, file[BUF_SIZE] = {0};
     int port;
     size_t bytes;
 
-    sockfdCommands = connectTo(SERVER_ADDR, SERVER_PORT);
+    parseInput(argv[1], user, password, host, file);
 
-    login(sockfdCommands);
+    sockfdCommands = connectTo( host , SERVER_PORT);
 
+    login(sockfdCommands, user, password);
+
+    printf("Entering Passive Mode.\n");
     sendMessage(sockfdCommands, "pasv\n");
 
     
@@ -126,8 +186,7 @@ int main(int argc, char **argv) {
     memset(buf, 0,BUF_SIZE);
 
     char wantedFile[BUF_SIZE] = "retr ";
-
-    strcat(wantedFile, argv[1]);
+    strcat(wantedFile, file);
     strcat(wantedFile, "\n");
 
     sendMessage(sockfdCommands, wantedFile);
@@ -152,7 +211,7 @@ int main(int argc, char **argv) {
     memset(buf, 0,BUF_SIZE);
 
      recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
-    printf("Data received: %s\n", buf);
+    printf("\n\nData received: %s\n", buf);
 
     if (close(sockfdCommands)<0) {
         perror("close()");
