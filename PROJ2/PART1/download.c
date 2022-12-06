@@ -66,15 +66,21 @@ int isCode(char * response, char * code) {
 
 int getDataAddress(char * response, char * address) {
     if (strlen(response) < 48) return 1;
-    int j = 0;
-    for (int i = 27; i < 40; i++) {
-        if (response[i] == ',') address[j] = '.';
+    int i = 27, j = 0, points = 0;
+    while (1) {
+        if (response[i] == ',') {
+            points++;
+            if (points == 4) break;
+            address[j] = '.';
+        }
         else address[j] = response[i];
         j++;
+        i++;
     }
     int n1 = 0, n2 = 0;
     int first = 1;
-    for (int i = 41; i < 48; i++) {
+    i++;
+    while(1) {
         if (response[i] == ')') {
             break;
         }
@@ -87,6 +93,7 @@ int getDataAddress(char * response, char * address) {
         else {
             n2 = n2 * 10 + (response[i] - '0');
         }
+        i++;
     }
     return n1 * 256 + n2;
 }
@@ -210,8 +217,12 @@ int main(int argc, char **argv) {
 
     memset(buf, 0,BUF_SIZE);
 
-     recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
-    printf("\n\nData received: %s\n", buf);
+    recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
+    printf("\n\n \\/  Data received  \\/\n%s\n", buf);
+
+    FILE * ptr = fopen("output.txt", "w");
+    fprintf(ptr, "%s", buf);
+    fclose(ptr);
 
     if (close(sockfdCommands)<0) {
         perror("close()");
