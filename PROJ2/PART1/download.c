@@ -219,19 +219,6 @@ int main(int argc, char **argv) {
 
     sleep(1);
 
-    memset(buf, 0,BUF_SIZE);
-
-    
-
-    recv(sockfdCommands, buf, BUF_SIZE, MSG_DONTROUTE);
-
-    
-    while (isCode(buf, "226") == 1) {
-        memset(buf, 0,BUF_SIZE);
-        sleep(1);
-        printf("Downloading...\n");
-        recv(sockfdCommands, buf, BUF_SIZE, MSG_DONTROUTE);
-    }
 
     memset(buf, 0,BUF_SIZE);
 
