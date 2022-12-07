@@ -1,6 +1,6 @@
 #define SERVER_PORT 21
 #define SERVER_ADDR "193.137.29.15"
-#define BUF_SIZE 2000
+#define BUF_SIZE 1000
 
 
 int findChar(char * word, char v);

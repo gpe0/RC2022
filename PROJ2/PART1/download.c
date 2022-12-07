@@ -119,7 +119,15 @@ int login(int sockfd, char * user, char * password) {
     sendMessage(sockfd, buf);
     sleep(1);
     memset(buf, 0,BUF_SIZE); //clear socket
-    recv(sockfd, buf, BUF_SIZE, MSG_DONTROUTE);
+    
+    while(recv(sockfd, buf, BUF_SIZE, MSG_DONTROUTE) > 0) {
+        if (strstr(buf, "230 Login successful")) return 0;
+        if (strstr(buf, "331 Please specify the password")) break;
+        memset(buf, 0,BUF_SIZE); //clear socket
+    }
+    
+
+
     memset(buf, 0,BUF_SIZE); //clear socket
 
     strcat(buf, "pass ");
@@ -196,32 +204,51 @@ int main(int argc, char **argv) {
     strcat(wantedFile, file);
     strcat(wantedFile, "\n");
 
+    printf("Seeking File...\n");
+
     sendMessage(sockfdCommands, wantedFile);
 
     recv(sockfdCommands, buf, BUF_SIZE, MSG_DONTROUTE);
+
     
     if (isCode(buf, "150") == 1) {
         perror("couldn't find the file");
         exit(-1);
     }
+    printf("Downloading...\n");
 
-    memset(buf, 0,BUF_SIZE);
     sleep(1);
 
-    recv(sockfdCommands, buf, BUF_SIZE, MSG_DONTROUTE);
+    memset(buf, 0,BUF_SIZE);
+
     
-    if (isCode(buf, "226") == 1) {
-        perror("couldn't finish the download");
-        exit(-1);
+
+    recv(sockfdCommands, buf, BUF_SIZE, MSG_DONTROUTE);
+
+    
+    while (isCode(buf, "226") == 1) {
+        memset(buf, 0,BUF_SIZE);
+        sleep(1);
+        printf("Downloading...\n");
+        recv(sockfdCommands, buf, BUF_SIZE, MSG_DONTROUTE);
     }
 
     memset(buf, 0,BUF_SIZE);
 
-    recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
-    printf("\n\n \\/  Data received  \\/\n%s\n", buf);
-
     FILE * ptr = fopen("output.txt", "w");
-    fprintf(ptr, "%s", buf);
+
+    bytes = recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
+
+    printf("\n \\/  Data received  \\/\n\n");
+
+    while (bytes > 0) {
+        printf("%s", buf);
+        fprintf(ptr, "%s", buf);
+        memset(buf, 0,BUF_SIZE);
+        bytes = recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
+    }
+    printf("\n");
+
     fclose(ptr);
 
     if (close(sockfdCommands)<0) {
