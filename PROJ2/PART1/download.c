@@ -226,15 +226,13 @@ int main(int argc, char **argv) {
 
     bytes = recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
 
-    printf("\n \\/  Data received  \\/\n\n");
-
     while (bytes > 0) {
-        printf("%s", buf);
         fprintf(ptr, "%s", buf);
         memset(buf, 0,BUF_SIZE);
         bytes = recv(sockfdData, buf, BUF_SIZE, MSG_DONTROUTE);
     }
-    printf("\n");
+
+    printf("\nData Received Successfully and saved in output.txt file!\n\n");
 
     fclose(ptr);
 
